@@ -1,10 +1,9 @@
 package examples
 
-// This file is docs/GUIDE.md's proof: every Go snippet the guide shows is
-// compiled and executed here, in the same order the guide presents it, so
-// the guide cannot describe an API that does not exist or a behavior that
-// does not hold. When the guide changes, change this file; when this file
-// changes, change the guide.
+// This file is docs/GUIDE.md's proof. The guide's files live in guide/
+// (compiled by the build); the behaviors the guide claims for them are
+// asserted here, in the guide's order. When the guide changes, change this
+// file; when this file changes, change the guide.
 
 import (
 	"context"
@@ -12,10 +11,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ubgo/validator/examples/guide/signup"
 	"github.com/ubgo/validator/i18n"
 	"github.com/ubgo/validator/interp"
 	"github.com/ubgo/validator/ir"
@@ -25,76 +27,14 @@ import (
 	"github.com/ubgo/validator/verr"
 )
 
-// --- GUIDE §2 Quickstart: the model -----------------------------------------
-
-// Signup is the guide's running example.
-type Signup struct {
-	Email    string    `json:"email"`
-	Password string    `json:"password"`
-	Age      int       `json:"age"`
-	Plan     string    `json:"plan"`
-	Website  *string   `json:"website"`
-	Tags     []string  `json:"tags"`
-	Starts   time.Time `json:"starts"`
-	Ends     time.Time `json:"ends"`
-	Company  string    `json:"company"`
-	VATID    string    `json:"vat_id"`
-}
-
-// SignupFields is what `validatorctl fields` generates into fields.gen.go.
-// Written by hand here so the proof stays self-contained; the shape is
-// exactly the generator's.
-var SignupFields = struct {
-	Email    vb.FieldRef[Signup, string]
-	Password vb.FieldRef[Signup, string]
-	Age      vb.FieldRef[Signup, int]
-	Plan     vb.FieldRef[Signup, string]
-	Website  vb.FieldRef[Signup, *string]
-	Tags     vb.FieldRef[Signup, []string]
-	Starts   vb.FieldRef[Signup, time.Time]
-	Ends     vb.FieldRef[Signup, time.Time]
-	Company  vb.FieldRef[Signup, string]
-	VATID    vb.FieldRef[Signup, string]
-}{
-	Email:    vb.NewField("Email", func(v Signup) string { return v.Email }).JSON("email"),
-	Password: vb.NewField("Password", func(v Signup) string { return v.Password }).JSON("password"),
-	Age:      vb.NewField("Age", func(v Signup) int { return v.Age }).JSON("age"),
-	Plan:     vb.NewField("Plan", func(v Signup) string { return v.Plan }).JSON("plan"),
-	Website:  vb.NewField("Website", func(v Signup) *string { return v.Website }).JSON("website"),
-	Tags:     vb.NewField("Tags", func(v Signup) []string { return v.Tags }).JSON("tags"),
-	Starts:   vb.NewField("Starts", func(v Signup) time.Time { return v.Starts }).JSON("starts"),
-	Ends:     vb.NewField("Ends", func(v Signup) time.Time { return v.Ends }).JSON("ends"),
-	Company:  vb.NewField("Company", func(v Signup) string { return v.Company }).JSON("company"),
-	VATID:    vb.NewField("VATID", func(v Signup) string { return v.VATID }).JSON("vat_id"),
-}
-
-// --- GUIDE §2 Quickstart: the rules -----------------------------------------
-
-// SignupSchema is the guide's schema, verbatim.
-var SignupSchema = vb.Struct("Signup",
-	vb.F(SignupFields.Email, vb.String().Email()).Trim().Lower(),
-	vb.F(SignupFields.Password, vb.String().MinLength(8).MaxLength(72)),
-	vb.F(SignupFields.Age, vb.Int[int]().Min(18).Max(120)),
-	vb.F(SignupFields.Plan, vb.String().Enum("free", "pro", "team")),
-	vb.F(SignupFields.Website, vb.Ptr(vb.String().URL())).Optional(),
-	vb.F(SignupFields.Tags, vb.Array(vb.String().MinLength(1)).MaxItems(5).Unique()).Optional(),
-	vb.F(SignupFields.Starts, vb.Time()),
-	vb.F(SignupFields.Ends, vb.Time().With(vb.After(SignupFields.Starts))),
-	vb.F(SignupFields.Company, vb.String()).Optional(),
-	vb.F(SignupFields.VATID, vb.String().Pattern(`^[A-Z]{2}[0-9A-Z]{8,12}$`)).Optional(),
-).Gate(
-	// A team plan needs a company name.
-	vb.Requires(vb.Eq(SignupFields.Plan, "team"), SignupFields.Company),
-	// If a VAT id is given, the company must be given too.
-	vb.Requires(vb.Has(SignupFields.VATID), SignupFields.Company),
-).MustBuild()
+// --- GUIDE §2 Quickstart -----------------------------------------------------
 
 func TestGuideQuickstart(t *testing.T) {
-	v, err := interp.FromSchema(SignupSchema)
+	v, err := interp.FromSchema(signup.Schema)
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := Signup{
+	in := signup.Signup{
 		Email: "  Ada@Example.com ", Password: "short", Age: 17, Plan: "team",
 		Starts: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Ends: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
@@ -123,7 +63,7 @@ func TestGuideQuickstart(t *testing.T) {
 		t.Errorf("json: %s", body)
 	}
 	// A valid value returns a plain nil.
-	ok := Signup{Email: "ada@example.com", Password: "correct horse", Age: 30, Plan: "free",
+	ok := signup.Signup{Email: "ada@example.com", Password: "correct horse", Age: 30, Plan: "free",
 		Starts: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Ends: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)}
 	if err := v.Validate(context.Background(), &ok); err != nil {
 		t.Errorf("valid signup rejected: %v", err)
@@ -133,7 +73,7 @@ func TestGuideQuickstart(t *testing.T) {
 // --- GUIDE §4.6 Map input, coercion, time strings ----------------------------
 
 func TestGuideMapInput(t *testing.T) {
-	v, _ := interp.FromSchema(SignupSchema, interp.Lax())
+	v, _ := interp.FromSchema(signup.Schema, interp.Lax())
 	form := map[string]any{
 		"email": "ada@example.com", "password": "correct horse", "age": "30", "plan": "free",
 		"starts": "2026-01-01T00:00:00Z", "ends": "2026-01-02T00:00:00Z",
@@ -148,7 +88,7 @@ func TestGuideMapInput(t *testing.T) {
 		t.Errorf("age not coerced: %T", form["age"])
 	}
 	// Default mode: "30" is a type mismatch for an int field.
-	strict, _ := interp.FromSchema(SignupSchema)
+	strict, _ := interp.FromSchema(signup.Schema)
 	err := strict.Validate(context.Background(), map[string]any{
 		"email": "ada@example.com", "password": "correct horse", "age": "30", "plan": "free",
 		"starts": "2026-01-01T00:00:00Z", "ends": "2026-01-02T00:00:00Z",
@@ -162,13 +102,13 @@ func TestGuideMapInput(t *testing.T) {
 // --- GUIDE §4.8 Fail-fast --------------------------------------------------------
 
 func TestGuideFailFast(t *testing.T) {
-	v, _ := interp.FromSchema(SignupSchema)
+	v, _ := interp.FromSchema(signup.Schema)
 	first := &verr.Errors{FailFast: true}
-	v.RunInto(context.Background(), &Signup{}, first)
+	v.RunInto(context.Background(), &signup.Signup{}, first)
 	if first.Len() != 1 {
 		t.Errorf("fail-fast reported %d issues", first.Len())
 	}
-	all := v.Run(context.Background(), &Signup{})
+	all := v.Run(context.Background(), &signup.Signup{})
 	if all.Len() < 3 {
 		t.Errorf("accumulating run reported only %d issues", all.Len())
 	}
@@ -246,10 +186,10 @@ func TestGuideCustomAndAsync(t *testing.T) {
 
 func TestGuideMessages(t *testing.T) {
 	// Per-rule override: your own code and message.
-	f := vb.NewField("Password", func(v Signup) string { return v.Password }).JSON("password")
+	f := vb.NewField("Password", func(v signup.Signup) string { return v.Password }).JSON("password")
 	s := vb.Struct("Pw", vb.F(f, vb.String().MinLength(8).Msg("weak_password", "use at least {value} characters"))).MustBuild()
 	v, _ := interp.FromSchema(s)
-	errs := v.Run(context.Background(), &Signup{Password: "x"})
+	errs := v.Run(context.Background(), &signup.Signup{Password: "x"})
 	if errs.Issues[0].Code != "weak_password" || errs.Issues[0].Message != "use at least 8 characters" {
 		t.Errorf("override: %+v", errs.Issues[0])
 	}
@@ -259,8 +199,8 @@ func TestGuideMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	cat := i18n.Merge(i18n.Default(), de)
-	v2, _ := interp.FromSchema(SignupSchema)
-	localized := cat.Localize(v2.Run(context.Background(), &Signup{Password: "x"}))
+	v2, _ := interp.FromSchema(signup.Schema)
+	localized := cat.Localize(v2.Run(context.Background(), &signup.Signup{Password: "x"}))
 	for _, is := range localized.Issues {
 		if is.Path == "$.password" && is.Message != "mindestens 8 Zeichen" {
 			t.Errorf("localized: %q", is.Message)
@@ -271,7 +211,7 @@ func TestGuideMessages(t *testing.T) {
 // --- GUIDE §5 Export: JSON Schema, manifest, TypeScript module ----------------------------
 
 func TestGuideExport(t *testing.T) {
-	res, err := jsonschema.Emit(SignupSchema.IR(), jsonschema.WithID("https://example.com/signup.json"))
+	res, err := jsonschema.Emit(signup.Schema.IR(), jsonschema.WithID("https://example.com/signup.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +241,7 @@ func TestGuideExport(t *testing.T) {
 		t.Errorf("ts module: %s", ts)
 	}
 	// The IR round-trips through JSON and is checked on the way back.
-	raw, _ := json.Marshal(SignupSchema.IR())
+	raw, _ := json.Marshal(signup.Schema.IR())
 	var back ir.Schema
 	if err := json.Unmarshal(raw, &back); err != nil {
 		t.Fatal(err)
@@ -309,7 +249,7 @@ func TestGuideExport(t *testing.T) {
 	if err := ir.Check(&back); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := interp.New(&back, interp.WithFuncs(SignupSchema)); err != nil {
+	if _, err := interp.New(&back, interp.WithFuncs(signup.Schema)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -363,5 +303,30 @@ func TestGuideVariants(t *testing.T) {
 	}
 	if err := dv.Validate(context.Background(), &Doc{ID: "nope"}); err == nil {
 		t.Error("no variant should match")
+	}
+}
+
+// TestGuideEmbedsFiles pins the guide to the files it shows: every file
+// under guide/ appears verbatim in docs/GUIDE.md, so editing one without
+// the other fails here instead of drifting.
+func TestGuideEmbedsFiles(t *testing.T) {
+	guide, err := os.ReadFile(filepath.Join("..", "docs", "GUIDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{
+		"guide/signup/model.go",
+		"guide/signup/fields.gen.go",
+		"guide/signup/rules.go",
+		"guide/cmd/signup-server/main.go",
+		"guide/cmd/signup-export/main.go",
+	} {
+		src, err := os.ReadFile(rel)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(guide), strings.TrimRight(string(src), "\n")) {
+			t.Errorf("docs/GUIDE.md does not embed %s verbatim", rel)
+		}
 	}
 }
