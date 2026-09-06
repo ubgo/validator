@@ -8,6 +8,8 @@
 
 `validator` is a struct-native Go validation library whose rules are stored as a **serializable intermediate representation (IR)** instead of opaque closures. Because the rules are data, the same tree that validates in Go can be exported to JSON Schema and compiled to a Standard-Schema-compatible TypeScript validator. The backend stays the single source of truth; the frontend validator is generated, never hand-maintained; and any rule that genuinely cannot cross the language boundary is listed in a portability manifest instead of being silently dropped.
 
+**New here? Read the [user guide](docs/GUIDE.md)**: a five-step quickstart, the end-to-end workflow with diagrams, and every feature with a snippet. Every snippet in it is executed by `examples/guide_test.go`.
+
 ## Why
 
 Across the Go validators we surveyed, one capability combination is held by nobody: struct-native authoring, serializable rules, JSON Schema export, and multi-language output together. `protovalidate` has the reach but forces a protobuf data model. `go-playground/validator` has the rule breadth but rules are opaque tag strings. The fluent libraries (`ozzo`, `valgo`, `zog`) have nice ergonomics but store rules as Go closures you cannot introspect. That empty cell is this project.

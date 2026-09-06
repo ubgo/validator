@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `docs/GUIDE.md`: the user guide (quickstart, workflow diagrams, every feature with a snippet, CLI reference, portability table), proven by `examples/guide_test.go`.
 - `jsonschema.Contract()` and `validatorctl ir contract`: the JSON Schema of the IR wire format, generated from the Go types; the `examples` module proves the golden IR documents conform and malformed ones do not.
 - `ir.CheckPattern`, wired into `ir.Check`: every `pattern` rule must be valid RE2 and free of RE2-only syntax so it runs unchanged under ECMA-262.
 - Coercion modes in `interp`: `Lax()`, `Strict()`, `WithCoerce(mode)`; field marker `vb.Field.NoCoerce()` (IR transform kind `strict`). Field markers beat call options.

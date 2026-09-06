@@ -29,9 +29,12 @@ func newGenCmd(a *app) *cobra.Command {
 		Short: "Generate specialized Validate<Type> functions from a serialized IR document",
 		Long: `Reads an IR document (--schema) whose root title and defs name structs in
 the package directory, and writes validate.gen.go with one reflection-free
-Validate<Type>(ctx, *Type, rt.Registry) function per struct. Schemas using
-unions, discriminated unions, transforms or CEL are refused; run them under
-the interpreter until codegen supports them.`,
+Validate<Type>(ctx, *Type, rt.Registry) function per struct, plus a
+Validate<Type>Into variant that writes into a caller-owned issue list.
+Unions, discriminated unions and transforms compile to Go; the parts the
+generator cannot type statically (a discriminated union on an interface
+field, a union with collection variants) run the interpreter on that
+subtree at the same path. CEL conditions are refused.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "."
