@@ -1,0 +1,21 @@
+{
+  "name": "validator",
+  "binary": "validatorctl",
+  "tagline": "Author validation once in Go. Run it everywhere.",
+  "description": "Struct-native Go validator whose rules are a serializable IR: the same rules validate in Go (zero-alloc codegen), export to JSON Schema, and generate a Standard-Schema-compatible TypeScript validator. Non-portable rules are reported, never silently dropped.",
+  "repo": "ubgo/validator",
+  "module": "github.com/ubgo/validator",
+  "language": "go",
+  "kind": "library+cli",
+  "license": "Apache-2.0",
+  "author": { "name": "khanakia", "email": "khanakia@gmail.com", "github": "khanakia" },
+  "homepage": "https://pkg.go.dev/github.com/ubgo/validator",
+  "topics": ["golang", "go", "validation", "validator", "json-schema", "typescript", "standard-schema", "codegen", "isomorphic", "zod", "ajv", "struct-validation", "developer-tools"],
+  "positioning": {
+    "audience": "Go backend teams with a TypeScript frontend who are tired of maintaining the same validation rules twice",
+    "problem": "every Go validator either stores rules as opaque closures or tag strings that cannot be exported, so frontend validation is hand-copied and drifts; the one tool that exports (Tygor) silently drops custom rules",
+    "alternatives": ["go-playground/validator", "ozzo-validation", "zog", "protovalidate", "Tygor"],
+    "differentiators": ["rules are serializable data, not closures", "one IR feeds Go validation, JSON Schema, and TS generation in lockstep", "codegen zero-alloc hot path with a reflection fallback", "explicit portability manifest — non-portable rules are never dropped", "Standard Schema output drops into tRPC/TanStack/RHF adapter-free"]
+  },
+  "brandKit": false
+}

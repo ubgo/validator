@@ -1,0 +1,13 @@
+{
+  "locale": "de",
+  "messages": {
+    "required": "Pflichtfeld",
+    "min_length": "muss mindestens {value} Zeichen haben",
+    "max_length": "darf höchstens {value} Zeichen haben",
+    "email": "muss eine gültige E-Mail-Adresse sein",
+    "min": "muss mindestens {value} sein",
+    "max": "darf höchstens {value} sein",
+    "enum": "muss einer der Werte {values} sein",
+    "unknown_key": "unbekanntes Feld"
+  }
+}

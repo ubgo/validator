@@ -1,0 +1,148 @@
+# https://taskfile.dev
+#
+# Tasks for the validator module. Run them from this directory. Every module
+# carries the same task names on purpose: `task test` means the same thing
+# everywhere, so moving between ubgo modules costs no re-learning.
+
+version: "3"
+
+vars:
+  PLATFORMS: linux/amd64 linux/arm64 darwin/arm64 windows/amd64 freebsd/amd64
+
+includes:
+  # The CLI module carries its own Taskfile; `task cli:build`, `task cli:ci`,
+  # etc. proxy into it with the right working directory.
+  cli:
+    taskfile: ./cli/Taskfile.yml
+    dir: ./cli
+  # The TypeScript runtime; `task ts:ci` etc.
+  ts:
+    taskfile: ./ts/Taskfile.yml
+    dir: ./ts
+  # Proof module: third-party JSON Schema validator + Node round-trip.
+  examples:
+    taskfile: ./examples/Taskfile.yml
+    dir: ./examples
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Run tests with the race detector
+    cmds:
+      - go test -race ./...
+
+  test:cover:
+    desc: Report statement coverage
+    cmds:
+      - go test -coverprofile=cover.out ./...
+      - go tool cover -func=cover.out | tail -1
+
+  test:cover:html:
+    desc: Open the coverage report in a browser
+    deps: [test:cover]
+    cmds:
+      - go tool cover -html=cover.out
+
+  test:uncovered:
+    desc: List functions below 100% coverage
+    cmds:
+      - go test -coverprofile=cover.out ./... > /dev/null
+      - 'go tool cover -func=cover.out | grep -v "100.0%" || echo "everything is covered"'
+
+  cover:
+    desc: Statement coverage for BOTH modules
+    cmds:
+      - echo "── library"
+      - task: test:cover
+      - echo "── cli"
+      - task: cli:test:cover
+
+  bench:
+    desc: Run benchmarks with allocation counts
+    cmds:
+      - go test -run "^$" -bench . -benchmem ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  lint:
+    desc: Run golangci-lint (and staticcheck) when installed
+    cmds:
+      # PATH first, then GOPATH/bin — `go install` puts binaries there but
+      # shells often omit it, which silently skips an installed linter.
+      - |
+        bin=$(command -v golangci-lint || echo "$(go env GOPATH)/bin/golangci-lint")
+        [ -x "$bin" ] && "$bin" run ./... || echo "golangci-lint not installed; skipping"
+      - |
+        bin=$(command -v staticcheck || echo "$(go env GOPATH)/bin/staticcheck")
+        [ -x "$bin" ] && "$bin" ./... || echo "staticcheck not installed; skipping"
+
+  fmt:
+    desc: Format the source
+    cmds:
+      - gofmt -w .
+
+  fmt:check:
+    desc: Fail when the source is unformatted
+    cmds:
+      - |
+        out=$(gofmt -l .)
+        if [ -n "$out" ]; then echo "gofmt needed on:"; echo "$out"; exit 1; fi
+
+  tidy:
+    desc: Tidy go.mod and go.sum in both modules
+    cmds:
+      - go mod tidy
+      - task: cli:tidy
+      - task: examples:tidy
+
+  doc:
+    desc: Print the ir package's exported API
+    cmds:
+      - go doc -all ./ir
+
+  deps:
+    desc: Show this module's third-party dependencies
+    cmds:
+      - 'go list -deps ./... | grep "\." | grep -v ubgo/validator | sort -u || echo "none — stdlib only"'
+
+  build:cross:
+    desc: Cross-compile library + cli for every platform the README claims (the build IS the platform proof)
+    cmds:
+      - for: { var: PLATFORMS }
+        cmd: |
+          echo "── {{.ITEM}}"
+          GOOS={{splitList "/" .ITEM | first}} GOARCH={{splitList "/" .ITEM | last}} go build ./...
+          GOOS={{splitList "/" .ITEM | first}} GOARCH={{splitList "/" .ITEM | last}} go vet ./...
+          (cd cli && GOOS={{splitList "/" .ITEM | first}} GOARCH={{splitList "/" .ITEM | last}} go build ./...)
+
+  ci:
+    desc: The full gate — library, cli, ts AND the proof module — format, vet, lint, race tests, ts typecheck+tests+build, external proofs
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: lint
+      - task: test:race
+      - task: cli:ci
+      - task: ts:ci
+      # After ts:ci on purpose: the round-trip proof runs the built ts/dist.
+      - task: examples:ci
+
+  clean:
+    desc: Remove coverage artifacts
+    cmds:
+      - rm -f cover.out cover.html
+      - task: cli:clean
+      - task: ts:clean

@@ -1,0 +1,50 @@
+{
+  "entries": [
+    {
+      "path": "$.email",
+      "kind": "rule",
+      "name": "custom",
+      "class": "opaque",
+      "ref": "no_temp_domains",
+      "reason": "custom Go function runs server-side only"
+    },
+    {
+      "path": "$.email",
+      "kind": "rule",
+      "name": "async",
+      "class": "server",
+      "ref": "unique_email",
+      "endpoint": "/v/unique_email",
+      "reason": "async rule runs server-side; frontend round-trips"
+    },
+    {
+      "path": "$.email",
+      "kind": "transform",
+      "name": "trim",
+      "class": "lossy",
+      "reason": "JSON Schema validates, it does not transform; applied server-side"
+    },
+    {
+      "path": "$.email",
+      "kind": "transform",
+      "name": "lower",
+      "class": "lossy",
+      "reason": "JSON Schema validates, it does not transform; applied server-side"
+    },
+    {
+      "path": "$.end",
+      "kind": "rule",
+      "name": "after",
+      "class": "cel",
+      "ref": "Start",
+      "reason": "cross-field comparison needs CEL; JSON Schema cannot compare two properties"
+    },
+    {
+      "path": "$",
+      "kind": "gate",
+      "name": "when",
+      "class": "cel",
+      "reason": "comparing two properties needs CEL"
+    }
+  ]
+}
