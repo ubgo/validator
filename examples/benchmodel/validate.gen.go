@@ -37,7 +37,7 @@ func validateBenchUser(ctx context.Context, v *BenchUser, reg rt.Registry, path 
 	{
 		p1 := path.Field(".email")
 		_ = p1
-		if !(v.Email != "") {
+		if v.Email == "" {
 			rt.Required(errs, p1.String())
 		} else {
 			if !(rt.Email(v.Email)) {
@@ -51,7 +51,7 @@ func validateBenchUser(ctx context.Context, v *BenchUser, reg rt.Registry, path 
 	{
 		p2 := path.Field(".name")
 		_ = p2
-		if !(v.Name != "") {
+		if v.Name == "" {
 			rt.Required(errs, p2.String())
 		} else {
 			if !(rt.RuneLen(v.Name) >= int(float64(2))) {
@@ -68,7 +68,7 @@ func validateBenchUser(ctx context.Context, v *BenchUser, reg rt.Registry, path 
 	{
 		p3 := path.Field(".age")
 		_ = p3
-		if !(true) {
+		if false {
 			rt.Required(errs, p3.String())
 		} else {
 			if !(float64(v.Age) >= float64(float64(18))) {
@@ -85,7 +85,7 @@ func validateBenchUser(ctx context.Context, v *BenchUser, reg rt.Registry, path 
 	{
 		p4 := path.Field(".plan")
 		_ = p4
-		if !(v.Plan != "") {
+		if v.Plan == "" {
 			rt.Required(errs, p4.String())
 		} else {
 			if !(v.Plan == "free" || v.Plan == "pro" || v.Plan == "team") {
@@ -99,7 +99,7 @@ func validateBenchUser(ctx context.Context, v *BenchUser, reg rt.Registry, path 
 	{
 		p5 := path.Field(".website")
 		_ = p5
-		if !(v.Website != "") {
+		if v.Website == "" {
 		} else {
 			if !(rt.URL(v.Website)) {
 				rt.Fail(errs, "url", p5.String(), "must be a valid URL", "url", map[string]any{})
@@ -112,7 +112,7 @@ func validateBenchUser(ctx context.Context, v *BenchUser, reg rt.Registry, path 
 	{
 		p6 := path.Field(".uuid")
 		_ = p6
-		if !(v.UUID != "") {
+		if v.UUID == "" {
 			rt.Required(errs, p6.String())
 		} else {
 			if !(rt.UUID(v.UUID)) {
@@ -126,7 +126,7 @@ func validateBenchUser(ctx context.Context, v *BenchUser, reg rt.Registry, path 
 	{
 		p7 := path.Field(".tags")
 		_ = p7
-		if !(v.Tags != nil) {
+		if v.Tags == nil {
 		} else {
 			if !(len(v.Tags) <= int(float64(5))) {
 				rt.Fail(errs, "max_items", p7.String(), "must have at most {value} items", "maxItems", map[string]any{"value": float64(5)})
@@ -149,7 +149,7 @@ func validateBenchUser(ctx context.Context, v *BenchUser, reg rt.Registry, path 
 	{
 		p10 := path.Field(".score")
 		_ = p10
-		if !(true) {
+		if false {
 			rt.Required(errs, p10.String())
 		} else {
 			if !(float64(v.Score) >= float64(float64(0))) {
@@ -166,7 +166,7 @@ func validateBenchUser(ctx context.Context, v *BenchUser, reg rt.Registry, path 
 	{
 		p11 := path.Field(".country")
 		_ = p11
-		if !(v.Country != "") {
+		if v.Country == "" {
 			rt.Required(errs, p11.String())
 		} else {
 			if !(rt.CountryCode(v.Country)) {
@@ -180,9 +180,8 @@ func validateBenchUser(ctx context.Context, v *BenchUser, reg rt.Registry, path 
 	{
 		p12 := path.Field(".created")
 		_ = p12
-		if !(!v.Created.IsZero()) {
+		if v.Created.IsZero() {
 			rt.Required(errs, p12.String())
-		} else {
 		}
 	}
 	if errs.Stopped() {
@@ -191,7 +190,7 @@ func validateBenchUser(ctx context.Context, v *BenchUser, reg rt.Registry, path 
 	{
 		p13 := path.Field(".nickname")
 		_ = p13
-		if !(v.Nickname != "") {
+		if v.Nickname == "" {
 		} else {
 			if !(rt.RuneLen(v.Nickname) >= int(float64(2))) {
 				rt.Fail(errs, "min_length", p13.String(), "must be at least {value} characters", "minLength", map[string]any{"value": float64(2)})

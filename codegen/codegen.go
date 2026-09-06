@@ -355,27 +355,34 @@ func (g *gen) emitObjectBody(obj *ir.ObjectNode, pv string, fields map[string]fi
 		g.w("\t\t%s := %s.Field(%q)", p, pathVar, "."+wireName(f))
 		g.w("\t\t_ = %s", p)
 		expr := pv + "." + f.Name
-		present := presenceExpr(expr, gf.goType)
+		absent := absenceExpr(expr, gf.goType)
 		// Default fills an absent field before the presence test, exactly as
 		// the interpreter does; the other pre-transforms rewrite a present
 		// string in place (the value is reached through a pointer, so the
 		// write-back the interpreter does for pointer input always applies).
 		if def, ok := defaultOf(f); ok {
 			if lit, ok := typedLiteral(def, gf.goType); ok {
-				g.w("\t\tif !(%s) {", present)
+				g.w("\t\tif %s {", absent)
 				g.w("\t\t\t%s = %s", expr, lit)
 				g.w("\t\t}")
 			} else {
 				g.errf("field %s: default %#v cannot be assigned to %s", f.Name, def, gf.goType)
 			}
 		}
-		g.w("\t\tif !(%s) {", present)
+		g.w("\t\tif %s {", absent)
 		if !f.Optional {
 			g.w("\t\t\trt.Required(errs, %s.String())", p)
 		}
+		// An optional field with nothing to check would leave `} else {}`
+		// behind; emit the else only once something has gone into it.
+		markElse := g.body.Len()
 		g.w("\t\t} else {")
+		afterElse := g.body.Len()
 		g.emitTransforms(f, expr, gf.goType)
 		g.emitNode(f.Type, expr, gf.goType, p, pv, fields, true)
+		if g.body.Len() == afterElse {
+			g.body.Truncate(markElse)
+		}
 		g.w("\t\t}")
 		g.w("\t}")
 		g.stopCheck()
@@ -949,7 +956,7 @@ func (g *gen) emitGate(obj *ir.ObjectNode, gate ir.GatedRules, pv string, fields
 				g.errf("requires names unknown field %s", name)
 				continue
 			}
-			g.w("\t\tif !(%s) {", presenceExpr(pv+"."+gf.name, gf.goType))
+			g.w("\t\tif %s {", absenceExpr(pv+"."+gf.name, gf.goType))
 			rp := g.fresh("p")
 			g.w("\t\t\t%s := %s.Field(%q)", rp, pathVar, "."+wireOfGo(obj, name))
 			g.w("\t\t\trt.Required(errs, %s.String())", rp)
@@ -1204,6 +1211,24 @@ func guarded(presence, expr string) string {
 		return "(" + expr + ")"
 	}
 	return "(" + presence + " && " + expr + ")"
+}
+
+// absenceExpr renders "this value is absent" directly, rather than
+// negating presenceExpr at the call site. Wrapping the time case in !(...)
+// produced `!(!v.Placed.IsZero())`, which staticcheck rightly flags (SA4013)
+// and which no one would write by hand.
+func absenceExpr(expr, goType string) string {
+	switch {
+	case strings.HasPrefix(goType, "*"), strings.HasPrefix(goType, "[]"), strings.HasPrefix(goType, "map["):
+		return expr + " == nil"
+	case goType == "string":
+		return expr + ` == ""`
+	case goType == "time.Time":
+		return expr + ".IsZero()"
+	case goType == "any", goType == "interface{}":
+		return "!rt.Present(" + expr + ")"
+	}
+	return "false"
 }
 
 // presenceExpr renders the interpreter's presence rule for a Go type.

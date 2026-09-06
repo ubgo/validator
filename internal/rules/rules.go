@@ -123,11 +123,9 @@ const (
 // multiple of 0.1 despite binary rounding.
 const FloatEpsilon = 1e-9
 
-// UUID matches RFC 4122 text form.
-func UUID(s string) bool { return uuidRe.MatchString(s) }
-
-// ULID matches the ULID grammar.
-func ULID(s string) bool { return ulidRe.MatchString(s) }
+// uuidRe and ulidRe are no longer on the hot path — UUID and ULID in
+// fast.go decide these shapes directly — but they stay as the executable
+// reference those functions are tested against.
 
 // IPv4 accepts dotted-quad addresses only.
 func IPv4(s string) bool {

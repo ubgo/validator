@@ -142,7 +142,7 @@ func FuzzServeHTTPPaths(f *testing.F) {
 			t.Fatalf("undesigned status %d for %s %s", rec.Code, method, path)
 		}
 		// Only the declared endpoint, reached with POST, may answer 200.
-		if rec.Code == http.StatusOK && !(req.URL.Path == "/v/handle_free" && method == http.MethodPost) {
+		if rec.Code == http.StatusOK && (req.URL.Path != "/v/handle_free" || method != http.MethodPost) {
 			t.Fatalf("200 for %s %s (resolved path %q), which is not the declared endpoint", method, path, req.URL.Path)
 		}
 	})

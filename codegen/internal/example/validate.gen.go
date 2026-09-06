@@ -55,7 +55,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p1 := path.Field(".email")
 		_ = p1
-		if !(v.Email != "") {
+		if v.Email == "" {
 			rt.Required(errs, p1.String())
 		} else {
 			if !(rt.Email(v.Email)) {
@@ -79,7 +79,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p6 := path.Field(".qty")
 		_ = p6
-		if !(true) {
+		if false {
 			rt.Required(errs, p6.String())
 		} else {
 			if !(float64(v.Qty) >= float64(float64(1))) {
@@ -99,7 +99,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p7 := path.Field(".weight")
 		_ = p7
-		if !(true) {
+		if false {
 			rt.Required(errs, p7.String())
 		} else {
 			if !(float64(v.Weight) > float64(float64(0))) {
@@ -116,9 +116,8 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p8 := path.Field(".rush")
 		_ = p8
-		if !(true) {
+		if false {
 			rt.Required(errs, p8.String())
-		} else {
 		}
 	}
 	if errs.Stopped() {
@@ -127,7 +126,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p9 := path.Field(".note")
 		_ = p9
-		if !(v.Note != nil) {
+		if v.Note == nil {
 		} else {
 			if !(rt.RuneLen((*v.Note)) >= int(int(2))) {
 				rt.Fail(errs, "min_length", p9.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(2)})
@@ -143,9 +142,8 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p10 := path.Field(".placed")
 		_ = p10
-		if !(!v.Placed.IsZero()) {
+		if v.Placed.IsZero() {
 			rt.Required(errs, p10.String())
-		} else {
 		}
 	}
 	if errs.Stopped() {
@@ -154,7 +152,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p11 := path.Field(".ship")
 		_ = p11
-		if !(v.Ship != nil) {
+		if v.Ship == nil {
 		} else {
 			if !(v.Placed.IsZero() || (*v.Ship).After(v.Placed)) {
 				rt.Fail(errs, "after", p11.String(), "must be after {field}", "after", map[string]any{"field": "Placed"})
@@ -167,7 +165,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p12 := path.Field(".window")
 		_ = p12
-		if !(true) {
+		if false {
 			rt.Required(errs, p12.String())
 		} else {
 			if !(float64(v.Window) > float64(float64(0))) {
@@ -184,7 +182,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p13 := path.Field(".tags")
 		_ = p13
-		if !(v.Tags != nil) {
+		if v.Tags == nil {
 			rt.Required(errs, p13.String())
 		} else {
 			if !(len(v.Tags) >= int(int(1))) {
@@ -214,7 +212,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p16 := path.Field(".scores")
 		_ = p16
-		if !(v.Scores != nil) {
+		if v.Scores == nil {
 		} else {
 			if !(rt.UniqueOf(v.Scores)) {
 				rt.Fail(errs, "unique", p16.String(), "items must be unique", "unique", map[string]any{})
@@ -240,7 +238,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p19 := path.Field(".meta")
 		_ = p19
-		if !(v.Meta != nil) {
+		if v.Meta == nil {
 		} else {
 			if !(len(v.Meta) <= int(int(2))) {
 				rt.Fail(errs, "max_items", p19.String(), "must have at most {value} items", "maxItems", map[string]any{"value": int(2)})
@@ -266,7 +264,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p23 := path.Field(".billing")
 		_ = p23
-		if !(true) {
+		if false {
 			rt.Required(errs, p23.String())
 		} else {
 			r24 := v.Billing
@@ -279,7 +277,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p25 := path.Field(".shipping")
 		_ = p25
-		if !(v.Shipping != nil) {
+		if v.Shipping == nil {
 		} else {
 			r26 := (*v.Shipping)
 			validateAddress(ctx, &r26, reg, p25, errs)
@@ -291,7 +289,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p27 := path.Field(".lines")
 		_ = p27
-		if !(v.Lines != nil) {
+		if v.Lines == nil {
 			rt.Required(errs, p27.String())
 		} else {
 			if !(len(v.Lines) >= int(int(1))) {
@@ -308,7 +306,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 					{
 						p31 := p29.Field(".sku")
 						_ = p31
-						if !((&o30).Sku != "") {
+						if (&o30).Sku == "" {
 							rt.Required(errs, p31.String())
 						} else {
 							if !(rt.UUID((&o30).Sku)) {
@@ -322,7 +320,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 					{
 						p32 := p29.Field(".qty")
 						_ = p32
-						if !(true) {
+						if false {
 							rt.Required(errs, p32.String())
 						} else {
 							if !(float64((&o30).Qty) > float64(float64(0))) {
@@ -343,7 +341,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p33 := path.Field(".raw")
 		_ = p33
-		if !(v.Raw != nil) {
+		if v.Raw == nil {
 		} else {
 			if !(len(v.Raw) <= int(int(4))) {
 				rt.Fail(errs, "max_length", p33.String(), "must be at most {value} characters", "maxLength", map[string]any{"value": int(4)})
@@ -356,8 +354,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p34 := path.Field(".extra")
 		_ = p34
-		if !(rt.Present(v.Extra)) {
-		} else {
+		if !rt.Present(v.Extra) {
 		}
 	}
 	if errs.Stopped() {
@@ -366,7 +363,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p35 := path.Field(".coupon")
 		_ = p35
-		if !(v.Coupon != "") {
+		if v.Coupon == "" {
 		} else {
 			if !(rt.ULID(v.Coupon)) {
 				rt.Fail(errs, "ulid", p35.String(), "must be a valid ULID", "ulid", map[string]any{})
@@ -379,7 +376,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p36 := path.Field(".type")
 		_ = p36
-		if !(v.Type != "") {
+		if v.Type == "" {
 			rt.Required(errs, p36.String())
 		} else {
 			if !(v.Type == "online" || v.Type == "offline") {
@@ -393,7 +390,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p37 := path.Field(".url")
 		_ = p37
-		if !(v.URL != "") {
+		if v.URL == "" {
 		} else {
 			if !(rt.URL(v.URL)) {
 				rt.Fail(errs, "url", p37.String(), "must be a valid URL", "url", map[string]any{})
@@ -406,8 +403,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p38 := path.Field(".venue")
 		_ = p38
-		if !(v.Venue != "") {
-		} else {
+		if v.Venue == "" {
 		}
 	}
 	if errs.Stopped() {
@@ -416,7 +412,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p39 := path.Field(".sku")
 		_ = p39
-		if !(v.Sku != "") {
+		if v.Sku == "" {
 		} else {
 			if !(v.Sku == "SKU") {
 				rt.Fail(errs, "const", p39.String(), "must equal {value}", "const", map[string]any{"value": "SKU"})
@@ -429,10 +425,10 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p40 := path.Field(".nick")
 		_ = p40
-		if !(v.Nick != "") {
+		if v.Nick == "" {
 			v.Nick = "anon"
 		}
-		if !(v.Nick != "") {
+		if v.Nick == "" {
 			rt.Required(errs, p40.String())
 		} else {
 			v.Nick = rt.Trim(v.Nick)
@@ -451,7 +447,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p41 := path.Field(".ref")
 		_ = p41
-		if !(rt.Present(v.Ref)) {
+		if !rt.Present(v.Ref) {
 		} else {
 			ok42 := false
 			if !ok42 {
@@ -519,7 +515,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p50 := path.Field(".event")
 		_ = p50
-		if !(true) {
+		if false {
 			rt.Required(errs, p50.String())
 		} else {
 			o51 := v.Event
@@ -528,7 +524,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 				{
 					p52 := p50.Field(".kind")
 					_ = p52
-					if !((&o51).Kind != "") {
+					if (&o51).Kind == "" {
 						rt.Required(errs, p52.String())
 					} else {
 						if !((&o51).Kind == "offline") {
@@ -542,7 +538,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 				{
 					p53 := p50.Field(".address")
 					_ = p53
-					if !((&o51).Address != nil) {
+					if (&o51).Address == nil {
 						rt.Required(errs, p53.String())
 					} else {
 						r54 := (*(&o51).Address)
@@ -556,7 +552,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 				{
 					p55 := p50.Field(".kind")
 					_ = p55
-					if !((&o51).Kind != "") {
+					if (&o51).Kind == "" {
 						rt.Required(errs, p55.String())
 					} else {
 						if !((&o51).Kind == "online") {
@@ -570,7 +566,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 				{
 					p56 := p50.Field(".url")
 					_ = p56
-					if !((&o51).URL != "") {
+					if (&o51).URL == "" {
 						rt.Required(errs, p56.String())
 					} else {
 						if !(rt.URL((&o51).URL)) {
@@ -592,10 +588,10 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p57 := path.Field(".pref")
 		_ = p57
-		if !(v.Pref != nil) {
+		if v.Pref == nil {
 			v.Pref = rt.Ptr("a")
 		}
-		if !(v.Pref != nil) {
+		if v.Pref == nil {
 		} else {
 			(*v.Pref) = rt.Upper((*v.Pref))
 			if !((*v.Pref) == "A" || (*v.Pref) == "B") {
@@ -609,7 +605,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p58 := path.Field(".host")
 		_ = p58
-		if !(v.Host != "") {
+		if v.Host == "" {
 		} else {
 			if !(rt.Hostname(v.Host)) {
 				rt.Fail(errs, "hostname", p58.String(), "must be a valid hostname", "hostname", map[string]any{})
@@ -625,7 +621,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p59 := path.Field(".ver")
 		_ = p59
-		if !(v.Ver != "") {
+		if v.Ver == "" {
 		} else {
 			if !(rt.Semver(v.Ver)) {
 				rt.Fail(errs, "semver", p59.String(), "must be a valid semantic version", "semver", map[string]any{})
@@ -638,7 +634,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p60 := path.Field(".addr")
 		_ = p60
-		if !(v.Addr != "") {
+		if v.Addr == "" {
 		} else {
 			if !(rt.IP(v.Addr)) {
 				rt.Fail(errs, "ip", p60.String(), "must be a valid IP address", "ip", map[string]any{})
@@ -654,7 +650,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p61 := path.Field(".choice")
 		_ = p61
-		if !(rt.Present(v.Choice)) {
+		if !rt.Present(v.Choice) {
 		} else {
 			// discriminated union on Go type any: delegated to the interpreter (see fallback62).
 			rt.Interpret(ctx, reg, fallback62, v.Choice, &p61, errs)
@@ -666,7 +662,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p63 := path.Field(".code")
 		_ = p63
-		if !(v.Code != "") {
+		if v.Code == "" {
 		} else {
 			ok64 := false
 			if !ok64 {
@@ -719,7 +715,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p70 := path.Field(".bag")
 		_ = p70
-		if !(rt.Present(v.Bag)) {
+		if !rt.Present(v.Bag) {
 		} else {
 			// union with a array variant: delegated to the interpreter (see fallback71).
 			rt.Interpret(ctx, reg, fallback71, v.Bag, &p70, errs)
@@ -731,7 +727,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p72 := path.Field(".contact")
 		_ = p72
-		if !(v.Contact != "") {
+		if v.Contact == "" {
 		} else {
 			v.Contact = rt.NormalizeEmail(v.Contact)
 			if !(rt.Email(v.Contact)) {
@@ -745,7 +741,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p73 := path.Field(".units")
 		_ = p73
-		if !(true) {
+		if false {
 		} else {
 			// coerce: no-op on typed input
 			if !(float64(v.Units) >= float64(float64(1))) {
@@ -759,7 +755,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p74 := path.Field(".card")
 		_ = p74
-		if !(v.Card != "") {
+		if v.Card == "" {
 		} else {
 			if !(rt.CreditCard(v.Card)) {
 				rt.Fail(errs, "credit_card", p74.String(), "must be a valid card number", "creditCard", map[string]any{})
@@ -772,7 +768,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	{
 		p75 := path.Field(".lat")
 		_ = p75
-		if !(true) {
+		if false {
 			rt.Required(errs, p75.String())
 		} else {
 			if !(rt.Latitude(float64(v.Lat))) {
@@ -806,7 +802,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	if (v.Coupon != "") && !(v.Type != "" && (v.Type == "offline")) {
-		if !(v.Venue != "") {
+		if v.Venue == "" {
 			p80 := path.Field(".venue")
 			rt.Required(errs, p80.String())
 		}
@@ -880,7 +876,7 @@ func validateAddress(ctx context.Context, v *Address, reg rt.Registry, path rt.P
 	{
 		p86 := path.Field(".street")
 		_ = p86
-		if !(v.Street != "") {
+		if v.Street == "" {
 			rt.Required(errs, p86.String())
 		} else {
 			if !(rt.RuneLen(v.Street) >= int(int(1))) {
@@ -894,7 +890,7 @@ func validateAddress(ctx context.Context, v *Address, reg rt.Registry, path rt.P
 	{
 		p87 := path.Field(".zip")
 		_ = p87
-		if !(v.Zip != "") {
+		if v.Zip == "" {
 		} else {
 			if !(pattern88.MatchString(v.Zip)) {
 				rt.Fail(errs, "pattern", p87.String(), "must match {regex}", "pattern", map[string]any{"regex": "^[0-9]{5}$"})

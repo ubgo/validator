@@ -1148,20 +1148,31 @@ Valid input, the success path:
 
 | | ns/op | B/op | allocs/op |
 |---|---|---|---|
-| ubgo generated | 385 | 0 | 0 |
-| ubgo interpreter | 1924 | 184 | 15 |
-| go-playground/validator | 1913 | 545 | 14 |
+| ubgo generated | 198 | 0 | 0 |
+| ubgo interpreter | 1687 | 184 | 15 |
+| go-playground/validator | 1874 | 547 | 14 |
 
 Invalid input, four fields failing:
 
 | | ns/op | B/op | allocs/op |
 |---|---|---|---|
-| ubgo generated, `Into` | 999 | 1009 | 17 |
-| ubgo generated | 1178 | 1522 | 20 |
-| go-playground/validator | 1753 | 1432 | 34 |
-| ubgo interpreter | 2876 | 1602 | 29 |
+| ubgo generated, `Into` | 1015 | 1009 | 17 |
+| ubgo generated | 1150 | 1522 | 20 |
+| go-playground/validator | 1728 | 1432 | 34 |
+| ubgo interpreter | 2840 | 1602 | 29 |
 
-Read honestly: the generated executor is about five times faster than the incumbent on valid input and allocates nothing, and about 1.7 times faster on invalid input. The interpreter is at parity on valid input while using a third of the memory, and remains roughly 1.6 times slower when there are errors to report. Two things explain that gap and both are deliberate. Every issue we produce carries a parameter map and a rendered message, where go-playground returns a lightweight error object and renders text only if asked. And our format checks are exact where theirs are regular expressions: `email` is decided by `net/mail`, so an address we cannot settle with the allocation-free shortcut costs a full parse. Note that the invalid fixture's email has no "@" and so takes the fast rejection; an address that is malformed in a subtler way still pays for the parse. If validation is on a hot path and inputs frequently fail, generate.
+Read the two tables as different jobs, not as one number. Validating a value that passes produces nothing; validating a value that fails has to build an error for every broken field. Measured on the generated executor, that is the whole story:
+
+| issues produced | ns/op | allocs/op |
+|---|---|---|
+| 0 | 376 | 0 |
+| 1 | 425 | 3 |
+| 2 | 765 | 9 |
+| 3 | 1329 | 18 |
+
+So an issue costs roughly 300 ns and 5 allocations, because each one carries a parameter map and a rendered message. That is a deliberate trade: it is what lets the same error be re-rendered in another language, or in the browser, from its code and parameters. go-playground returns a lightweight error object and renders text only if asked, so it pays less per error and gives you less.
+
+Against that background: the generated executor is roughly nine times faster than the incumbent on valid input while allocating nothing, and about 1.5 times faster on invalid input. The interpreter is faster than the incumbent on valid input using a third of the memory, and about 1.6 times slower when there are errors, where reflection is the remaining cost. One caveat kept in view: the invalid fixture's email has no "@" and so takes an allocation-free rejection; an address malformed more subtly still pays for a full `net/mail` parse, because this library decides `email` exactly where go-playground uses a regular expression.
 
 ```sh
 go test -run xxx -bench BenchmarkCompare -benchmem ./examples/

@@ -303,6 +303,7 @@ func FuzzFastPaths(f *testing.F) {
 	for _, seed := range []string{
 		"ada@example.com", "not-an-email", "@x.io", "a@", "a@@b", `"q"@b.io`, "a@[1.2.3.4]",
 		"https://x.io/p", "x://y", "https://", "no-colon", "mailto:a@b", "https://x.io:80/p?q=1#f",
+		"123e4567-e89b-12d3-a456-426614174000", "01ARZ3NDEKTSV4RRFFQ69G5FAV", "01IRZ3NDEKTSV4RRFFQ69G5FAV",
 	} {
 		f.Add(seed)
 	}
@@ -315,5 +316,52 @@ func FuzzFastPaths(f *testing.F) {
 		if URL(s) != wantURL {
 			t.Fatalf("URL(%q) = %v, net/url says %v", s, URL(s), wantURL)
 		}
+		if UUID(s) != uuidRe.MatchString(s) {
+			t.Fatalf("UUID(%q) = %v, regexp says %v", s, UUID(s), uuidRe.MatchString(s))
+		}
+		if ULID(s) != ulidRe.MatchString(s) {
+			t.Fatalf("ULID(%q) = %v, regexp says %v", s, ULID(s), ulidRe.MatchString(s))
+		}
 	})
+}
+
+// TestUUIDULIDMatchRegexp pins the hand-written shape checks to the
+// regexps they replaced. The regexps stay in rules.go for exactly this:
+// a direct scan is only safe while it decides the same set.
+func TestUUIDULIDMatchRegexp(t *testing.T) {
+	cases := []string{
+		"", "x", "123e4567-e89b-12d3-a456-426614174000", "123E4567-E89B-12D3-A456-426614174000",
+		"123e4567-e89b-12d3-a456-42661417400", "123e4567-e89b-12d3-a456-4266141740000",
+		"123e4567e89b12d3a456426614174000", "123e4567-e89b-12d3-a456-42661417400g",
+		"123e4567+e89b-12d3-a456-426614174000", "-23e4567-e89b-12d3-a456-426614174000",
+		"01ARZ3NDEKTSV4RRFFQ69G5FAV", "81ARZ3NDEKTSV4RRFFQ69G5FAV", "01arz3ndektsv4rrffq69g5fav",
+		"01ARZ3NDEKTSV4RRFFQ69G5FA", "01ARZ3NDEKTSV4RRFFQ69G5FAVX",
+		"01IRZ3NDEKTSV4RRFFQ69G5FAV", "01LRZ3NDEKTSV4RRFFQ69G5FAV",
+		"01ORZ3NDEKTSV4RRFFQ69G5FAV", "01URZ3NDEKTSV4RRFFQ69G5FAV",
+	}
+	// Plus every single-character mutation of a valid ULID, which is where
+	// an alphabet mistake would hide.
+	valid := "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	for i := range valid {
+		for c := byte(0); c < 128; c++ {
+			cases = append(cases, valid[:i]+string(c)+valid[i+1:])
+		}
+	}
+	for _, s := range cases {
+		if got, want := UUID(s), uuidRe.MatchString(s); got != want {
+			t.Errorf("UUID(%q) = %v, regexp says %v", s, got, want)
+		}
+		if got, want := ULID(s), ulidRe.MatchString(s); got != want {
+			t.Errorf("ULID(%q) = %v, regexp says %v", s, got, want)
+		}
+	}
+	var sink bool
+	if n := testing.AllocsPerRun(200, func() {
+		sink = UUID("123e4567-e89b-12d3-a456-426614174000") && ULID(valid)
+	}); n != 0 {
+		t.Errorf("UUID/ULID allocate %.1f per call", n)
+	}
+	if !sink {
+		t.Error("the allocation probe did not validate its own fixtures")
+	}
 }

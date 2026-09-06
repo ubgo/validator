@@ -44,7 +44,7 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 	{
 		p1 := path.Field(".email")
 		_ = p1
-		if !(v.Email != "") {
+		if v.Email == "" {
 			rt.Required(errs, p1.String())
 		} else {
 			v.Email = rt.Trim(v.Email)
@@ -70,7 +70,7 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 	{
 		p6 := path.Field(".password")
 		_ = p6
-		if !(v.Password != "") {
+		if v.Password == "" {
 			rt.Required(errs, p6.String())
 		} else {
 			if !(rt.RuneLen(v.Password) >= int(float64(8))) {
@@ -87,7 +87,7 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 	{
 		p7 := path.Field(".age")
 		_ = p7
-		if !(true) {
+		if false {
 			rt.Required(errs, p7.String())
 		} else {
 			if !(float64(v.Age) >= float64(float64(18))) {
@@ -104,7 +104,7 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 	{
 		p8 := path.Field(".plan")
 		_ = p8
-		if !(v.Plan != "") {
+		if v.Plan == "" {
 			rt.Required(errs, p8.String())
 		} else {
 			if !(v.Plan == "free" || v.Plan == "pro" || v.Plan == "team") {
@@ -118,7 +118,7 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 	{
 		p9 := path.Field(".website")
 		_ = p9
-		if !(v.Website != nil) {
+		if v.Website == nil {
 		} else {
 			if !(rt.URL((*v.Website))) {
 				rt.Fail(errs, "url", p9.String(), "must be a valid URL", "url", map[string]any{})
@@ -131,7 +131,7 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 	{
 		p10 := path.Field(".tags")
 		_ = p10
-		if !(v.Tags != nil) {
+		if v.Tags == nil {
 		} else {
 			if !(len(v.Tags) <= int(float64(5))) {
 				rt.Fail(errs, "max_items", p10.String(), "must have at most {value} items", "maxItems", map[string]any{"value": float64(5)})
@@ -157,9 +157,8 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 	{
 		p13 := path.Field(".starts")
 		_ = p13
-		if !(!v.Starts.IsZero()) {
+		if v.Starts.IsZero() {
 			rt.Required(errs, p13.String())
-		} else {
 		}
 	}
 	if errs.Stopped() {
@@ -168,7 +167,7 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 	{
 		p14 := path.Field(".ends")
 		_ = p14
-		if !(!v.Ends.IsZero()) {
+		if v.Ends.IsZero() {
 			rt.Required(errs, p14.String())
 		} else {
 			if !(v.Starts.IsZero() || v.Ends.After(v.Starts)) {
@@ -182,8 +181,7 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 	{
 		p15 := path.Field(".company")
 		_ = p15
-		if !(v.Company != "") {
-		} else {
+		if v.Company == "" {
 		}
 	}
 	if errs.Stopped() {
@@ -192,7 +190,7 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 	{
 		p16 := path.Field(".vat_id")
 		_ = p16
-		if !(v.VATID != "") {
+		if v.VATID == "" {
 		} else {
 			if !(pattern17.MatchString(v.VATID)) {
 				rt.Fail(errs, "pattern", p16.String(), "must match {regex}", "pattern", map[string]any{"regex": "^[A-Z]{2}[0-9A-Z]{8,12}$"})
@@ -203,7 +201,7 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 		return
 	}
 	if v.Plan != "" && v.Plan == "team" {
-		if !(v.Company != "") {
+		if v.Company == "" {
 			p18 := path.Field(".company")
 			rt.Required(errs, p18.String())
 		}
@@ -212,7 +210,7 @@ func validateSignup(ctx context.Context, v *Signup, reg rt.Registry, path rt.Pat
 		return
 	}
 	if v.VATID != "" {
-		if !(v.Company != "") {
+		if v.Company == "" {
 			p19 := path.Field(".company")
 			rt.Required(errs, p19.String())
 		}

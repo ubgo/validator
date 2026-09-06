@@ -129,7 +129,13 @@ func urlFast(s string) bool {
 	i := 0
 	for i < len(s) && s[i] != ':' {
 		c := s[i]
-		if i == 0 && !isAlpha(c) || i > 0 && !(isAlpha(c) || isDigit(c) || c == '+' || c == '-' || c == '.') {
+		// RFC 3986: a scheme starts with a letter, then letters, digits,
+		// "+", "-" or ".".
+		ok := isAlpha(c)
+		if i > 0 {
+			ok = ok || isDigit(c) || c == '+' || c == '-' || c == '.'
+		}
+		if !ok {
 			return false
 		}
 		i++
@@ -301,4 +307,68 @@ func candidateFloat(c any) (float64, bool) {
 		return float64(x), true
 	}
 	return 0, false
+}
+
+// UUID and ULID have fixed shapes, so a direct scan decides them without a
+// regexp engine. Measured on a valid input, the regexp cost 228 ns; this
+// costs a few. The regexps remain in rules.go as the reference these must
+// agree with, and TestUUIDULIDMatchRegexp plus FuzzFastPaths check that
+// agreement on arbitrary input.
+
+// uuidLen is the canonical 8-4-4-4-12 length, dashes included.
+const uuidLen = 36
+
+// uuidDashes are the positions the dashes must occupy.
+var uuidDashes = [4]int{8, 13, 18, 23}
+
+// UUID matches RFC 4122 text form: hex digits in 8-4-4-4-12 groups.
+func UUID(s string) bool {
+	if len(s) != uuidLen {
+		return false
+	}
+	for _, i := range uuidDashes {
+		if s[i] != '-' {
+			return false
+		}
+	}
+	for i := 0; i < uuidLen; i++ {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			continue
+		}
+		if !isHex(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// ulidLen is the fixed length of a ULID's Crockford base32 encoding.
+const ulidLen = 26
+
+// ULID matches the ULID grammar: 26 Crockford base32 characters, the first
+// no greater than '7' so the 48-bit timestamp cannot overflow.
+func ULID(s string) bool {
+	if len(s) != ulidLen || s[0] < '0' || s[0] > '7' {
+		return false
+	}
+	for i := 0; i < ulidLen; i++ {
+		if !isCrockford(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// isCrockford reports whether c is in Crockford's base32 alphabet as ULID
+// uses it: digits and upper-case letters excluding I, L, O and U, which are
+// omitted because they read as 1, 1, 0 and V.
+func isCrockford(c byte) bool {
+	switch {
+	case c >= '0' && c <= '9':
+		return true
+	case c >= 'A' && c <= 'H', c == 'J', c == 'K', c == 'M', c == 'N',
+		c >= 'P' && c <= 'T', c >= 'V' && c <= 'Z':
+		return true
+	}
+	return false
 }

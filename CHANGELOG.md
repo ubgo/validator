@@ -11,7 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Fuzz targets for every untrusted-input surface, each pinning behavioral properties rather than only absence of panics: IR decode and round-trip stability (`ir`), interpreter map input including fail-fast/accumulate first-issue agreement and lax-never-rejects (`interp`), and the HTTP handler's response contract and endpoint isolation (`rulehttp`). `task fuzz`; `task ci` runs a short smoke of each.
 - `task vuln` (govulncheck across all three modules) as its own CI job plus a weekly schedule, kept out of the deterministic code gate on purpose.
 
+### Fixed
+- `task lint` swallowed real findings: `[ -x $bin ] && $bin run ... || echo skipping` treated a failing linter as a missing one, so a green gate hid three staticcheck findings, one of them a generator defect. Absence now skips; a finding fails.
+- The generator emitted `if !(!v.Field.IsZero())` for required time fields (SA4013) and an empty `} else {}` for optional fields with no rules. It now renders absence directly and omits an empty else.
+
 ### Changed
+- `UUID` and `ULID` decide their fixed shapes by direct scan instead of a regexp: a valid UUID went from 228 ns to 40 ns, which alone halved the generated success path (385 to 198 ns/op). The regexps stay in `rules.go` as the reference the scans are tested against.
 - Format checks gained sound fast rejections to match their fast acceptances: an address with no `@`, or an empty local part or domain, is refused without a `net/mail` parse (269 ns and 9 allocations down to 4 ns and none), and a string with no `:` is not a URL. Both are properties of the grammars, not heuristics, and `FuzzFastPaths` checks every input against `net/mail` and `net/url` directly. Failure path: interpreter 3225 to 2876 ns/op, generated 1374 to 999 ns/op, now about 1.7x faster than go-playground.
 - Interpreter allocations reduced on both paths: the declared-names map is built only when unknown keys are actually checked (map input under `ExtraForbid`), and enum/const checks go through `rules.InValue`, which compares a `reflect.Value` against the candidates without boxing. Success path 2265 → 1880 ns/op and 704 → 184 B/op, now at parity with go-playground on time and a third of its memory.
 - Module floor lowered to Go 1.24 (was pinned to the 1.26 toolchain); CI gate now runs on 1.24 and 1.26.

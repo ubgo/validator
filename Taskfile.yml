@@ -82,12 +82,15 @@ tasks:
     cmds:
       # PATH first, then GOPATH/bin — `go install` puts binaries there but
       # shells often omit it, which silently skips an installed linter.
+      # `cmd && cmd || echo` would swallow a real finding as if the tool were
+      # missing, which is how three staticcheck findings once rode through a
+      # green gate. Absence skips; a finding fails.
       - |
         bin=$(command -v golangci-lint || echo "$(go env GOPATH)/bin/golangci-lint")
-        [ -x "$bin" ] && "$bin" run ./... || echo "golangci-lint not installed; skipping"
+        if [ -x "$bin" ]; then "$bin" run ./...; else echo "golangci-lint not installed; skipping"; fi
       - |
         bin=$(command -v staticcheck || echo "$(go env GOPATH)/bin/staticcheck")
-        [ -x "$bin" ] && "$bin" ./... || echo "staticcheck not installed; skipping"
+        if [ -x "$bin" ]; then "$bin" ./...; else echo "staticcheck not installed; skipping"; fi
 
   fmt:
     desc: Format the source
