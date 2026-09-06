@@ -10,3 +10,6 @@ cover.html
 /docsi
 # END repolink
 examples/guide/snippettmp/
+
+# Go test binaries left by `go test -c` / profiling runs
+*.test
