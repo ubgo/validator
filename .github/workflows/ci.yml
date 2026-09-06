@@ -36,7 +36,7 @@ jobs:
             cli/go.sum
             examples/go.sum
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11
 
