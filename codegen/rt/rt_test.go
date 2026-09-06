@@ -245,3 +245,70 @@ func TestInterpretFallback(t *testing.T) {
 type ptrReg struct{}
 
 func (*ptrReg) Func(string) (vb.Func, bool) { return nil, false }
+
+type typedReg struct {
+	fn  vb.Func
+	raw any
+}
+
+func (r typedReg) Func(string) (vb.Func, bool)  { return r.fn, r.fn != nil }
+func (r typedReg) TypedFunc(string) (any, bool) { return r.raw, r.raw != nil }
+
+type plainReg struct{ fn vb.Func }
+
+func (r plainReg) Func(string) (vb.Func, bool) { return r.fn, r.fn != nil }
+
+func TestCallT(t *testing.T) {
+	ctx := context.Background()
+	boxedCalls, typedCalls := 0, 0
+	boxed := func(_ context.Context, v any) error {
+		boxedCalls++
+		n, ok := v.(int)
+		if !ok {
+			return errors.New("not int")
+		}
+		if n < 0 {
+			return errors.New("neg")
+		}
+		return nil
+	}
+	typedFn := func(_ context.Context, v int) error {
+		typedCalls++
+		if v < 0 {
+			return errors.New("neg")
+		}
+		return nil
+	}
+	// Held as the interface up front: converting the struct per call would
+	// allocate and hide what the measurement is about.
+	var reg Registry = &typedReg{fn: boxed, raw: typedFn}
+	if err := CallT(ctx, reg, "r", 1); err != nil || typedCalls != 1 || boxedCalls != 0 {
+		t.Fatalf("typed hit: err=%v typed=%d boxed=%d", err, typedCalls, boxedCalls)
+	}
+	if err := CallT(ctx, reg, "r", -1); err == nil {
+		t.Error("typed failure lost")
+	}
+	// Type mismatch falls back to the boxed body, which decides.
+	if err := CallT(ctx, reg, "r", int64(1)); err == nil || boxedCalls != 1 {
+		t.Errorf("mismatch fallback: err=%v boxed=%d", err, boxedCalls)
+	}
+	// A registry without the typed upgrade uses the boxed path.
+	if err := CallT(ctx, &plainReg{fn: boxed}, "r", 2); err != nil {
+		t.Errorf("plain registry: %v", err)
+	}
+	if !CondT(ctx, reg, "r", 5) || CondT(ctx, reg, "r", -5) {
+		t.Error("CondT")
+	}
+	var nilReg Registry
+	if err := CallT(ctx, nilReg, "r", 1); !errors.Is(err, ErrNoRegistry) {
+		t.Errorf("nil registry: %v", err)
+	}
+	if err := CallT(ctx, &typedReg{}, "r", 1); err == nil {
+		t.Error("unregistered name passed")
+	}
+	// Allocation-free on the typed hit.
+	allocs := testing.AllocsPerRun(1000, func() { _ = CallT(ctx, reg, "r", 7) })
+	if allocs != 0 {
+		t.Errorf("typed CallT allocates %.1f per call", allocs)
+	}
+}

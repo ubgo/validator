@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/ubgo/validator/ir"
+	"github.com/ubgo/validator/vb"
 )
 
 func golden(t *testing.T) *ir.Schema {
@@ -561,5 +563,89 @@ func TestInline(t *testing.T) {
 	plain := NewObject().Set("type", "string")
 	if text(t, Inline(plain)) != `{"type":"string"}` {
 		t.Error("no defs")
+	}
+}
+
+func TestContract(t *testing.T) {
+	doc := Contract()
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, "ir.contract.schema.json", append(out, '\n'))
+	src := string(out)
+	for _, want := range []string{
+		`"$id": "` + ContractID + `"`,
+		`"const": "` + ir.Version + `"`,
+		`"TypeNode": {`,
+		`"$ref": "#/$defs/ObjectNode"`,
+		`"$ref": "#/$defs/AnyNode"`,
+		`"kind": {`,
+		`"const": "oneof"`,
+		`"Condition": {`,
+		`"GatedRules": {`,
+		`"Rule": {`,
+		`"Transform": {`,
+		`"NodeMeta": {`,
+		`"SchemaMeta": {`,
+		`"additionalProperties": false`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	// Every node kind has a def and appears in the union.
+	defs, _ := doc.Get("$defs")
+	union, _ := defs.(*Object).Get("TypeNode")
+	variants, _ := union.(*Object).Get(kwOneOf)
+	if len(variants.([]any)) != len(nodeKinds) {
+		t.Errorf("union has %d variants, want %d", len(variants.([]any)), len(nodeKinds))
+	}
+	for _, nk := range nodeKinds {
+		if _, ok := defs.(*Object).Get(nk.typ.Name()); !ok {
+			t.Errorf("no def for %s", nk.typ.Name())
+		}
+	}
+	// The root is inlined, never also a def.
+	if _, dup := defs.(*Object).Get("Schema"); dup {
+		t.Error("root Schema emitted as a def too")
+	}
+	// The wire names the contract hardcodes are the Go json tags.
+	if tag, _, _ := strings.Cut(reflect.TypeFor[ir.Schema]().Field(0).Tag.Get("json"), ","); tag != wireVersion {
+		t.Errorf("ir.Schema version tag %q != %q", tag, wireVersion)
+	}
+	if raw, _ := json.Marshal(&ir.AnyNode{}); !strings.Contains(string(raw), `"`+wireKind+`":"any"`) {
+		t.Errorf("node discriminator is not %q: %s", wireKind, raw)
+	}
+	// Deterministic.
+	again, _ := json.Marshal(Contract())
+	first, _ := json.Marshal(doc)
+	if string(again) != string(first) {
+		t.Error("contract is not deterministic")
+	}
+}
+
+func TestStrictTransformManifest(t *testing.T) {
+	type S struct{ N int }
+	f := vb.NewField("N", func(s S) int { return s.N }).JSON("n")
+	s := vb.Struct("S", vb.F(f, vb.Int[int]()).NoCoerce()).MustBuild()
+	res, err := Emit(s.IR())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, e := range res.Manifest.Entries {
+		if e.Kind == KindTransform && e.Name == "strict" && e.Class == ClassLossy && e.Path == "$.n" && strings.Contains(e.Reason, "pinned strict") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("strict entry missing: %+v", res.Manifest.Entries)
+	}
+	// It must not enable coercion on its own.
+	for _, e := range res.Manifest.Entries {
+		if e.Name == "coerce" {
+			t.Error("strict produced a coerce entry")
+		}
 	}
 }

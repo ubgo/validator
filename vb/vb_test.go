@@ -512,3 +512,38 @@ func TestDefsAndUnionRegistry(t *testing.T) {
 		t.Error("Any registry must be empty")
 	}
 }
+
+func TestNoCoerceAndTypedFunc(t *testing.T) {
+	type S struct{ N int }
+	f := NewField("N", func(s S) int { return s.N })
+	s := Struct("S", F(f, Int[int]().Custom("even", func(_ context.Context, n int) error {
+		if n%2 != 0 {
+			return errors.New("odd")
+		}
+		return nil
+	})).NoCoerce()).MustBuild()
+	tr := s.IR().Root.(*ir.ObjectNode).Fields[0].Transforms
+	if len(tr) != 1 || tr[0].Kind != ir.TransformStrict || tr[0].Phase != ir.PhasePre {
+		t.Fatalf("NoCoerce transform: %+v", tr)
+	}
+	raw, ok := s.TypedFunc("even")
+	if !ok {
+		t.Fatal("TypedFunc missing")
+	}
+	fn, isTyped := raw.(func(context.Context, int) error)
+	if !isTyped {
+		t.Fatalf("raw is %T", raw)
+	}
+	if fn(context.Background(), 3) == nil || fn(context.Background(), 4) != nil {
+		t.Error("typed body semantics")
+	}
+	if _, ok := s.TypedFunc("nope"); ok {
+		t.Error("unknown name found")
+	}
+	// The boxed path still narrows and reports a TypeError on a mismatch.
+	boxed, _ := s.Func("even")
+	var te *TypeError
+	if err := boxed(context.Background(), "3"); !errors.As(err, &te) {
+		t.Errorf("boxed mismatch: %v", err)
+	}
+}

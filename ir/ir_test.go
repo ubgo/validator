@@ -451,3 +451,41 @@ func TestWithKindRejectsNonObject(t *testing.T) {
 		t.Error("a non-object body must be rejected")
 	}
 }
+
+func TestCheckPattern(t *testing.T) {
+	ok := []string{`^[a-z]+$`, `\d{3}-\d{4}`, `(?:ab)+`, `^\S+@\S+$`, `[\x00-\x7F]*`, `^[-+]?[0-9]+(?:\.[0-9]+)?$`}
+	for _, p := range ok {
+		if err := CheckPattern(p); err != nil {
+			t.Errorf("%q should pass: %v", p, err)
+		}
+	}
+	bad := map[string]string{
+		`(?i)abc`:      "inline flags",
+		`(?P<n>a)`:     "named groups",
+		`\Aabc`:        `\A`,
+		`abc\z`:        `\z`,
+		`\Qa.b\E`:      `\Q`,
+		`[[:alpha:]]+`: "POSIX",
+		`\p{L}+`:       "Unicode property",
+		`(?=a)b`:       "not valid RE2",
+		`(a)\1`:        "not valid RE2",
+		`a{2,1}`:       "not valid RE2",
+	}
+	for p, want := range bad {
+		err := CheckPattern(p)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: want error containing %q, got %v", p, want, err)
+		}
+	}
+	// Check wires it in.
+	if err := Check(&Schema{Version: Version, Root: &StringNode{Rules: []Rule{Pattern(`(?i)x`)}}}); err == nil || !strings.Contains(err.Error(), "inline flags") {
+		t.Errorf("Check must lint patterns: %v", err)
+	}
+}
+
+func TestStrictTransformAccepted(t *testing.T) {
+	s := &Schema{Version: Version, Root: &ObjectNode{Fields: []FieldNode{{Name: "N", Type: &IntNode{}, Transforms: []Transform{{Kind: TransformStrict, Phase: PhasePre}}}}}}
+	if err := Check(s); err != nil {
+		t.Fatal(err)
+	}
+}

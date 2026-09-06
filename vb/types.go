@@ -37,12 +37,12 @@ func setMsg(rules []ir.Rule, code, message string) []ir.Rule {
 
 // register adds a function body under name; a nil registry is created on
 // demand so zero-value builders work.
-func register(reg *registry, name string, fn Func) *registry {
+func register[V any](reg *registry, name string, fn func(context.Context, V) error) *registry {
 	next := newRegistry()
 	if reg != nil {
 		_ = next.merge(reg)
 	}
-	next.funcs[name] = funcEntry{fn: fn, id: nextFuncID.Add(1)}
+	next.funcs[name] = funcEntry{fn: typed(name, fn), raw: fn, id: nextFuncID.Add(1)}
 	return next
 }
 
@@ -171,7 +171,7 @@ func (t *StringType) Const(v string) *StringType { return t.rule(ir.Const(v)) }
 // Custom registers fn under name and records an opaque, non-portable rule.
 func (t *StringType) Custom(name string, fn func(context.Context, string) error) *StringType {
 	c := t.rule(ir.Custom(name))
-	c.reg = register(t.reg, name, typed(name, fn))
+	c.reg = register(t.reg, name, fn)
 	return c
 }
 
@@ -179,7 +179,7 @@ func (t *StringType) Custom(name string, fn func(context.Context, string) error)
 // round-trips (empty lets the generator derive it).
 func (t *StringType) Async(name, endpoint string, fn func(context.Context, string) error) *StringType {
 	c := t.rule(ir.Async(name, endpoint))
-	c.reg = register(t.reg, name, typed(name, fn))
+	c.reg = register(t.reg, name, fn)
 	return c
 }
 
@@ -278,14 +278,14 @@ func (t *IntType[N]) Const(v N) *IntType[N] { return t.rule(ir.Const(v)) }
 // Custom registers fn under name and records an opaque, non-portable rule.
 func (t *IntType[N]) Custom(name string, fn func(context.Context, N) error) *IntType[N] {
 	c := t.rule(ir.Custom(name))
-	c.reg = register(t.reg, name, typed(name, fn))
+	c.reg = register(t.reg, name, fn)
 	return c
 }
 
 // Async registers a server-side rule.
 func (t *IntType[N]) Async(name, endpoint string, fn func(context.Context, N) error) *IntType[N] {
 	c := t.rule(ir.Async(name, endpoint))
-	c.reg = register(t.reg, name, typed(name, fn))
+	c.reg = register(t.reg, name, fn)
 	return c
 }
 
@@ -363,7 +363,7 @@ func (t *FloatType[F]) Longitude() *FloatType[F] { return t.rule(ir.Longitude())
 // Custom registers fn under name and records an opaque, non-portable rule.
 func (t *FloatType[F]) Custom(name string, fn func(context.Context, F) error) *FloatType[F] {
 	c := t.rule(ir.Custom(name))
-	c.reg = register(t.reg, name, typed(name, fn))
+	c.reg = register(t.reg, name, fn)
 	return c
 }
 
@@ -408,7 +408,7 @@ func (t *BoolType) Const(v bool) *BoolType { return t.rule(ir.Const(v)) }
 // Custom registers fn under name and records an opaque, non-portable rule.
 func (t *BoolType) Custom(name string, fn func(context.Context, bool) error) *BoolType {
 	c := t.rule(ir.Custom(name))
-	c.reg = register(t.reg, name, typed(name, fn))
+	c.reg = register(t.reg, name, fn)
 	return c
 }
 
@@ -456,7 +456,7 @@ func (t *BytesType) MaxLength(n int) *BytesType { return t.rule(ir.MaxLength(n))
 // Custom registers fn under name and records an opaque, non-portable rule.
 func (t *BytesType) Custom(name string, fn func(context.Context, []byte) error) *BytesType {
 	c := t.rule(ir.Custom(name))
-	c.reg = register(t.reg, name, typed(name, fn))
+	c.reg = register(t.reg, name, fn)
 	return c
 }
 
@@ -527,7 +527,7 @@ func (t *TimeType) With(rule func(*TimeType) *TimeType) *TimeType { return rule(
 // Custom registers fn under name and records an opaque, non-portable rule.
 func (t *TimeType) Custom(name string, fn func(context.Context, time.Time) error) *TimeType {
 	c := t.rule(ir.Custom(name))
-	c.reg = register(t.reg, name, typed(name, fn))
+	c.reg = register(t.reg, name, fn)
 	return c
 }
 
@@ -585,6 +585,6 @@ func (t *DurationType) Lt(n time.Duration) *DurationType { return t.rule(ir.Lt(f
 // Custom registers fn under name and records an opaque, non-portable rule.
 func (t *DurationType) Custom(name string, fn func(context.Context, time.Duration) error) *DurationType {
 	c := t.rule(ir.Custom(name))
-	c.reg = register(t.reg, name, typed(name, fn))
+	c.reg = register(t.reg, name, fn)
 	return c
 }

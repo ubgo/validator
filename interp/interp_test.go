@@ -316,13 +316,22 @@ func TestMapInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := v.Validate(ctx, m)
-	// Times decode as strings from JSON — the interpreter reports the type
-	// mismatch rather than guessing; unknown keys are reported under forbid.
-	// Numbers decode as float64 and are accepted where integral.
+	// Times arrive as strings from JSON: a malformed one is a type issue, a
+	// well-formed RFC 3339 one is parsed and written back. Unknown keys are
+	// reported under forbid. Numbers decode as float64 and are accepted
+	// where integral.
 	expect(t, err, "$.start:type", "$.end:type", "$.bogus:unknown_key")
 	m["age"] = 30.5
 	expect(t, v.Validate(ctx, m), "$.age:type", "$.start:type", "$.end:type", "$.bogus:unknown_key")
 	m["age"] = 30.0
+	m["start"], m["end"] = "2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"
+	delete(m, "bogus")
+	expect(t, v.Validate(ctx, m))
+	if _, ok := m["end"].(time.Time); !ok {
+		t.Errorf("time string not written back as time.Time: %T", m["end"])
+	}
+	m["end"] = "2025-12-31T00:00:00Z" // parsed, then the after-rule fires
+	expect(t, v.Validate(ctx, m), "$.end:after")
 	// Transforms wrote back into the map.
 	if m["email"] != "ada@example.com" {
 		t.Errorf("transform not applied to map: %q", m["email"])
@@ -527,9 +536,9 @@ func TestNewRefusals(t *testing.T) {
 	_ = fName
 	// Gate rules and conditions are compiled too: an unregistered custom
 	// condition inside a gate is caught.
-	g := vb.Struct("D", vb.F(fName, vb.String())).Gate(vb.When(ir.CustomCond("ghost"), []ir.TargetRule{vb.On(fName, ir.Pattern("("))}, []ir.TargetRule{vb.On(fName, ir.Custom("ghost2"))})).MustBuild()
+	g := vb.Struct("D", vb.F(fName, vb.String())).Gate(vb.When(ir.CustomCond("ghost"), []ir.TargetRule{vb.On(fName, ir.Pattern("^ok$"))}, []ir.TargetRule{vb.On(fName, ir.Custom("ghost2"))})).MustBuild()
 	_, err = FromSchema(g)
-	for _, want := range []string{`"ghost"`, "pattern", `"ghost2"`} {
+	for _, want := range []string{`"ghost"`, `"ghost2"`} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("gate compile missed %s: %v", want, err)
 		}
@@ -799,3 +808,58 @@ func TestHelpers(t *testing.T) {
 func reflectValue(v any) reflect.Value { return reflect.ValueOf(v) }
 
 func ptr[T any](v T) *T { return &v }
+
+func TestCoerceModes(t *testing.T) {
+	type F = map[string]any
+	type C struct{ Age, Lax, Pinned int }
+	age, lax, pinned := vb.Int[int]().Min(18), vb.Int[int](), vb.Int[int]()
+	// age carries no marker; lax carries coerce; pinned carries strict.
+	fAge := vb.NewField("Age", func(c C) int { return c.Age }).JSON("age")
+	fLax := vb.NewField("Lax", func(c C) int { return c.Lax }).JSON("lax")
+	fPinned := vb.NewField("Pinned", func(c C) int { return c.Pinned }).JSON("pinned")
+	s := vb.Struct("C", vb.F(fAge, age), vb.F(fLax, lax).Coerce(), vb.F(fPinned, pinned).NoCoerce()).MustBuild()
+	in := func() F { return F{"age": "20", "lax": "1", "pinned": "2"} }
+	codes := func(errs *verr.Errors) string {
+		var out []string
+		for _, i := range errs.Issues {
+			out = append(out, i.Path+":"+i.Code)
+		}
+		return strings.Join(out, " ")
+	}
+	cases := []struct {
+		name string
+		opts []Option
+		want string
+	}{
+		{"default: only marked", nil, "$.age:type $.pinned:type"},
+		{"lax: all but strict", []Option{Lax()}, "$.pinned:type"},
+		{"strict: only marked", []Option{Strict()}, "$.age:type $.pinned:type"},
+		{"explicit mode", []Option{WithCoerce(CoerceLax)}, "$.pinned:type"},
+	}
+	for _, c := range cases {
+		v, err := FromSchema(s, c.opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := in()
+		if got := codes(v.Run(context.Background(), m)); got != c.want {
+			t.Errorf("%s: got %q want %q", c.name, got, c.want)
+		}
+		if _, isNum := m["lax"].(float64); !isNum {
+			t.Errorf("%s: marked field not written back: %T", c.name, m["lax"])
+		}
+		if _, isStr := m["pinned"].(string); !isStr {
+			t.Errorf("%s: strict field was coerced", c.name)
+		}
+	}
+	// Lax on struct input is a no-op: typed fields have their type.
+	v, _ := FromSchema(s, Lax())
+	if err := v.Validate(context.Background(), &C{Age: 20, Lax: 1, Pinned: 2}); err != nil {
+		t.Errorf("struct input under lax: %v", err)
+	}
+	// Lax also lifts a valid conversion into a rule check: "17" → 17 < 18.
+	v, _ = FromSchema(s, Lax())
+	if got := codes(v.Run(context.Background(), F{"age": "17", "lax": "1", "pinned": 2})); got != "$.age:min" {
+		t.Errorf("lax then rule: %q", got)
+	}
+}

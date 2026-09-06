@@ -87,6 +87,34 @@ func Cond(ctx context.Context, reg Registry, name string, value any) bool {
 	return Call(ctx, reg, name, value) == nil
 }
 
+// TypedRegistry is the optional upgrade a registry offers when it kept the
+// author's function with its real signature. *vb.Schema does.
+type TypedRegistry interface {
+	TypedFunc(name string) (any, bool)
+}
+
+// CallT runs a registered rule body with a statically typed value. When the
+// registry kept the typed function and its parameter type is exactly T, it
+// is called directly — no boxing of value, no assertion inside the body —
+// which is what keeps a custom rule off the allocation count on the
+// generated success path. Anything else falls back to [Call], so a type
+// mismatch is still reported as a TypeError, never silently passed.
+func CallT[T any](ctx context.Context, reg Registry, name string, value T) error {
+	if tr, ok := reg.(TypedRegistry); ok {
+		if raw, found := tr.TypedFunc(name); found {
+			if fn, matches := raw.(func(context.Context, T) error); matches {
+				return fn(ctx, value)
+			}
+		}
+	}
+	return Call(ctx, reg, name, value)
+}
+
+// CondT is [Cond] over the typed path.
+func CondT[T any](ctx context.Context, reg Registry, name string, value T) bool {
+	return CallT(ctx, reg, name, value) == nil
+}
+
 // Present is the interpreter's presence rule for values whose static type
 // is an interface: nil-able kinds non-nil, strings non-empty, zero time
 // absent, everything else present.

@@ -156,6 +156,13 @@ func (c *checker) rule(path string, r Rule) {
 	if len(missing) > 0 {
 		c.errf(path, "rule %q missing params: %s", r.Kind, strings.Join(missing, ", "))
 	}
+	if r.Kind == RulePattern {
+		if re, ok := r.Params[ParamRegex].(string); ok {
+			if err := CheckPattern(re); err != nil {
+				c.errf(path, "%v", err)
+			}
+		}
+	}
 	if r.Portable != "" {
 		if !r.Portable.Valid() {
 			c.errf(path, "unknown portability %q", r.Portable)

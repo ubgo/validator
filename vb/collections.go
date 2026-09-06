@@ -213,7 +213,7 @@ func (t *ArrayType[E]) Unique() *ArrayType[E] { return t.rule(ir.Unique()) }
 // Custom registers fn over the whole slice.
 func (t *ArrayType[E]) Custom(name string, fn func(context.Context, []E) error) *ArrayType[E] {
 	c := t.rule(ir.Custom(name))
-	c.reg = register(t.reg, name, typed(name, fn))
+	c.reg = register(t.reg, name, fn)
 	return c
 }
 
@@ -261,7 +261,7 @@ func (t *MapType[K, V]) MaxItems(n int) *MapType[K, V] { return t.rule(ir.MaxIte
 // Custom registers fn over the whole map.
 func (t *MapType[K, V]) Custom(name string, fn func(context.Context, map[K]V) error) *MapType[K, V] {
 	c := t.rule(ir.Custom(name))
-	c.reg = register(t.reg, name, typed(name, fn))
+	c.reg = register(t.reg, name, fn)
 	return c
 }
 

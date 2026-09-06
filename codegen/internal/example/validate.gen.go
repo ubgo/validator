@@ -61,12 +61,12 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 			if !(rt.Email(v.Email)) {
 				rt.Fail(errs, "email", p1.String(), "must be a valid email address", "email", map[string]any{})
 			}
-			if err2 := rt.Call(ctx, reg, "no_temp", v.Email); err2 != nil {
+			if err2 := rt.CallT(ctx, reg, "no_temp", v.Email); err2 != nil {
 				params3 := map[string]any{"ref": "no_temp"}
 				params3["error"] = err2.Error()
 				rt.Fail(errs, "custom", p1.String(), "{error}", "custom", params3)
 			}
-			if err4 := rt.Call(ctx, reg, "unique_email", v.Email); err4 != nil {
+			if err4 := rt.CallT(ctx, reg, "unique_email", v.Email); err4 != nil {
 				params5 := map[string]any{"endpoint": "/v/unique_email", "ref": "unique_email"}
 				params5["error"] = err4.Error()
 				rt.Fail(errs, "custom", p1.String(), "{error}", "async", params5)
@@ -598,8 +598,8 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		if !(v.Pref != nil) {
 		} else {
 			(*v.Pref) = rt.Upper((*v.Pref))
-			if !((*v.Pref) == "a" || (*v.Pref) == "b") {
-				rt.Fail(errs, "enum", p57.String(), "must be one of {values}", "enum", map[string]any{"values": []any{"a", "b"}})
+			if !((*v.Pref) == "A" || (*v.Pref) == "B") {
+				rt.Fail(errs, "enum", p57.String(), "must be one of {values}", "enum", map[string]any{"values": []any{"A", "B"}})
 			}
 		}
 	}
@@ -841,7 +841,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	if errs.Stopped() {
 		return
 	}
-	if rt.Cond(ctx, reg, "vip", *v) {
+	if rt.CondT(ctx, reg, "vip", *v) {
 	} else {
 		{
 			p85 := path.Field(".qty")

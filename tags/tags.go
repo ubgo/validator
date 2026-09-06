@@ -172,11 +172,60 @@ func (m *migrator) field(typeName, fieldName, typeExpr, tag string, field *ir.Fi
 			}
 		default:
 			if !m.applyRule(typeName, fieldName, node, t) {
-				m.report(typeName, fieldName, t.raw, "no IR equivalent")
+				m.report(typeName, fieldName, t.raw, unsupportedReason(t, node))
 			}
 		}
 	}
 	return node, gates
+}
+
+// unsupportedReason explains, per known tag, why it did not migrate and
+// what to do instead — a report that only says "no IR equivalent" sends
+// the reader back to the source to guess.
+func unsupportedReason(t tagItem, n ir.TypeNode) string {
+	if strings.Contains(t.raw, "|") {
+		return "OR-groups (a|b) have no IR form; split into a oneof or a custom rule"
+	}
+	switch t.name {
+	case "eqfield", "nefield", "gtefield", "ltefield", "gtfield", "ltfield", "eqcsfield", "necsfield", "gtcsfield", "ltcsfield":
+		if _, isTime := n.(*ir.TimeNode); isTime {
+			return "only gtfield/ltfield on time fields migrate (after/before); the rest need the CEL layer (v2)"
+		}
+		return "cross-field comparison on a non-time field needs the CEL layer (v2); express it as a Requires gate or a custom rule"
+	case "excludes", "excludesall", "excludesrune":
+		return "negative content match needs lookahead, which is not RE2-portable; use a custom rule"
+	case "isdefault":
+		return "isdefault has no portable meaning (frontend cannot know Go zero values); use a const rule or a custom rule"
+	case "unique":
+		if t.value != "" {
+			return "unique=<field> on slices of structs is not modeled; use a custom rule over the slice"
+		}
+		return "unique applies to slices only"
+	case "datetime":
+		return "only RFC 3339 layouts migrate (date / datetime); other layouts need a pattern rule"
+	case "dive":
+		return "dive is only meaningful on slices and maps"
+	case "required_if", "required_unless", "required_with", "required_without", "required_with_all", "required_without_all":
+		return "malformed conditional requirement"
+	}
+	if _, isStr := n.(*ir.StringNode); !isStr {
+		if _, known := classPatterns[t.name]; known || isFormatTag(t.name) {
+			return "format tag on a non-string field"
+		}
+	}
+	return "no IR equivalent"
+}
+
+// isFormatTag lists the string-format tags applyRule understands, so the
+// wrong-type reason can name the mismatch.
+func isFormatTag(name string) bool {
+	switch name {
+	case "email", "url", "uri", "http_url", "uuid", "uuid4", "uuid_rfc4122", "uuid4_rfc4122", "ipv4", "ip4_addr", "ipv6", "ip6_addr", "ip", "ip_addr",
+		"cidr", "cidrv4", "cidrv6", "mac", "hostname", "hostname_rfc1123", "fqdn", "base64", "json", "semver", "notblank",
+		"credit_card", "jwt", "iso3166_1_alpha2", "country_code", "iso4217", "hexcolor", "e164":
+		return true
+	}
+	return false
 }
 
 // typeNode maps a Go type expression to an IR node, applying element tags

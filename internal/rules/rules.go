@@ -9,8 +9,6 @@ import (
 	"encoding/json"
 	"math"
 	"net"
-	"net/mail"
-	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -124,19 +122,6 @@ const (
 // FloatEpsilon bounds the remainder check in MultipleOf so 0.3 is a
 // multiple of 0.1 despite binary rounding.
 const FloatEpsilon = 1e-9
-
-// Email accepts a bare RFC 5322 address and rejects display-name forms
-// ("Name <a@b>"), which mail.ParseAddress would otherwise allow.
-func Email(s string) bool {
-	addr, err := mail.ParseAddress(s)
-	return err == nil && addr.Address == s
-}
-
-// URL requires an absolute URL with scheme and host.
-func URL(s string) bool {
-	u, err := url.Parse(s)
-	return err == nil && u.Scheme != "" && u.Host != ""
-}
 
 // UUID matches RFC 4122 text form.
 func UUID(s string) bool { return uuidRe.MatchString(s) }

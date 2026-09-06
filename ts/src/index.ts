@@ -197,6 +197,9 @@ export function createValidator<T = unknown>(
   // on for the whole document — the closest faithful mirror, documented in
   // the manifest entry's reason.
   const coerce = manifest.entries.some((e) => e.kind === "transform" && e.name === "coerce");
+  // Ajv cannot exempt one property from coerceTypes; a strict field in a
+  // coercing schema is validated laxly here, warned about through its
+  // manifest entry, and pinned by the server.
   const ajv = makeAjv(dialect, { ...(coerce ? { coerceTypes: true } : {}), ...options.ajv });
   const compiled = ajv.compile(schema as object) as ValidateFunction;
 

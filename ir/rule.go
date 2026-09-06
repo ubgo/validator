@@ -355,7 +355,10 @@ func Async(ref, endpoint string) Rule {
 type TransformKind string
 
 const (
-	TransformCoerce         TransformKind = "coerce"
+	TransformCoerce TransformKind = "coerce"
+	// TransformStrict marks a field that must never be coerced, even when
+	// the executor runs in lax mode. Field markers beat call options.
+	TransformStrict         TransformKind = "strict"
 	TransformTrim           TransformKind = "trim"
 	TransformLower          TransformKind = "lower"
 	TransformUpper          TransformKind = "upper"
@@ -366,6 +369,7 @@ const (
 // transformKinds is the closed set [Check] accepts.
 var transformKinds = map[TransformKind]struct{}{
 	TransformCoerce:         {},
+	TransformStrict:         {},
 	TransformTrim:           {},
 	TransformLower:          {},
 	TransformUpper:          {},

@@ -391,11 +391,12 @@ func (g *gen) emitObjectBody(obj *ir.ObjectNode, pv string, fields map[string]fi
 // interpreter; unsupported kinds are refused at generation time.
 func (g *gen) emitTransforms(f *ir.FieldNode, expr, goType string) {
 	for _, t := range f.Transforms {
-		if t.Kind == ir.TransformCoerce {
+		if t.Kind == ir.TransformCoerce || t.Kind == ir.TransformStrict {
 			// Coercion turns strings into typed values on map input; a
 			// generated validator only ever sees the typed struct, where the
-			// field already has its type. Nothing to do, on purpose.
-			g.w("\t\t// coerce: no-op on typed input")
+			// field already has its type. Nothing to do, on purpose — and
+			// the same for strict, which only pins map input.
+			g.w("\t\t// %s: no-op on typed input", t.Kind)
 		}
 	}
 	target := expr
@@ -418,7 +419,7 @@ func (g *gen) emitTransforms(f *ir.FieldNode, expr, goType string) {
 			g.w("\t\t%s = rt.NormalizeEmail(%s)", target, target)
 		case ir.TransformDefault:
 			// Applied before the presence test.
-		case ir.TransformCoerce:
+		case ir.TransformCoerce, ir.TransformStrict:
 			// Noted above, before the string guard.
 		default:
 			g.errf("field %s: transform %q is not supported by codegen", f.Name, t.Kind)
@@ -907,7 +908,7 @@ func (g *gen) emitRule(r *ir.Rule, expr, goType, pathVar, scopePV string, scope 
 	case ir.RuleCustom, ir.RuleAsync:
 		name, _ := r.Params[ir.ParamRef].(string)
 		errVar := g.fresh("err")
-		g.w("\t\tif %s := rt.Call(ctx, reg, %q, %s); %s != nil {", errVar, name, expr, errVar)
+		g.w("\t\tif %s := rt.CallT(ctx, reg, %q, %s); %s != nil {", errVar, name, expr, errVar)
 		g.w("\t\t\t%s := %s", g.fresh("params"), params)
 		last := "params" + strconv.Itoa(g.seq)
 		g.w("\t\t\t%s[\"error\"] = %s.Error()", last, errVar)
@@ -1072,7 +1073,7 @@ func (g *gen) condExpr(k ir.Condition, pv string, fields map[string]field) (stri
 		}
 		return "!" + s, true
 	case ir.CondCustom:
-		return fmt.Sprintf("rt.Cond(ctx, reg, %q, *%s)", k.Ref, pv), true
+		return fmt.Sprintf("rt.CondT(ctx, reg, %q, *%s)", k.Ref, pv), true
 	}
 	g.errf("condition %s is not supported by codegen yet", k.Kind)
 	return "", false

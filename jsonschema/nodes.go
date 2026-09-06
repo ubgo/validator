@@ -41,6 +41,9 @@ const (
 	kwThen                 = "then"
 	kwElse                 = "else"
 	kwRef                  = "$ref"
+	kwSchema               = "$schema"
+	kwID                   = "$id"
+	kwTitle                = "title"
 	kwDescription          = "description"
 	kwExamples             = "examples"
 	kwDefault              = "default"
@@ -337,6 +340,15 @@ func (e *emitter) object(path string, o *ir.ObjectNode) *Object {
 		for _, t := range f.Transforms {
 			if t.Kind == ir.TransformDefault {
 				prop.Set(kwDefault, t.Params[ir.ParamValue])
+				continue
+			}
+			if t.Kind == ir.TransformStrict {
+				// Strict only pins map input against lax coercion; a JSON
+				// Schema with coerceTypes off already behaves that way, and
+				// with it on Ajv cannot exempt one property. Reported so the
+				// runtime can warn when a strict field sits in a coercing
+				// schema.
+				e.manifest.Add(Entry{Path: fp, Kind: KindTransform, Name: string(t.Kind), Class: ClassLossy, Reason: "Ajv coerceTypes is global; this field is pinned strict server-side"})
 				continue
 			}
 			reason := "JSON Schema validates, it does not transform; applied server-side"

@@ -46,7 +46,7 @@ go install github.com/ubgo/validator/cli/cmd/validatorctl@latest
 1. **IR** — shipped: nodes, rules, conditions, JSON round-trip, `Check`.
 2. **Typed builder** — shipped: `vb` compiles to the IR and reproduces the golden fixture byte for byte.
 3. **Reflection interpreter** — shipped: `interp` runs the IR against structs or decoded JSON, refuses anything it cannot execute.
-4. **Codegen executor** — shipped: `validatorctl gen` emits reflection-free `Validate<Type>` functions; a 37-case conformance suite requires identical issues from both executors. Success path allocates only for custom-rule calls.
+4. **Codegen executor** — shipped: `validatorctl gen` emits reflection-free `Validate<Type>` functions; an 86-case conformance suite requires identical issues from both executors. The success path is allocation-free through `Validate<Type>Into`.
 5. **Codegen accessors** — shipped: `validatorctl fields` generates `UserFields` for rename-safe rule authoring.
 6. **JSON Schema emitter** — shipped: draft 2020-12 and draft-07, discriminator-keyed if/then for variants, and a manifest of every non-portable rule.
 7. **TypeScript runtime shim** — shipped: `@ubgo/validator` in `ts/`, Ajv + Standard Schema + Standard JSON Schema, same issue codes as Go.
@@ -116,7 +116,27 @@ first := &verr.Errors{FailFast: true}                       // stop at the first
 models.ValidateUserInto(ctx, &user, UserSchema, first)
 ```
 
-On the example fixture (arm64, includes a union, a discriminated union and transforms): generated 1.4 µs and 21 allocs per call, interpreter 8.1 µs and 73 allocs. Paths are built lazily on the stack and rendered only when an issue is reported. Run `go test -bench . ./codegen/internal/example/`.
+On the example fixture (arm64; a union, a discriminated union, transforms, two custom rules and a gate predicate), a valid order costs:
+
+| Path | ns/op | allocs/op |
+|---|---|---|
+| `ValidateOrderInto` (caller-owned issue list) | 490 | 0 |
+| `ValidateOrder` | 510 | 1 (the result) |
+| `interp` | 9700 | 81 |
+
+Paths are built lazily on the stack and rendered only when an issue is reported. Custom rules and gate predicates reach the author's typed function through `rt.CallT`, so no value is boxed on the way; the email and URL formats take allocation-free fast paths that accept only a proven subset of what `net/mail` and `net/url` accept and defer everything else to them. Run `go test -bench . ./codegen/internal/example/`.
+
+### Coercion: strict or lax
+
+Struct input is never coerced; a typed field already has its type. On `map[string]any` input (decoded JSON, form values) the interpreter converts strings for int, float, bool, time and duration fields according to a mode:
+
+```go
+interp.FromSchema(UserSchema)                 // default: only fields marked .Coerce()
+interp.FromSchema(UserSchema, interp.Lax())   // every coercible field, except those marked .NoCoerce()
+interp.FromSchema(UserSchema, interp.Strict()) // only marked fields (names the intent; same as the default today)
+```
+
+Field markers beat the call option in both directions: `.Coerce()` always converts, `.NoCoerce()` never does. RFC 3339 strings are also accepted for `time.Time` fields on map input and written back as `time.Time`.
 
 ## Export
 
@@ -129,6 +149,8 @@ for _, e := range res.Manifest.Entries {
 ```
 
 Or from the CLI: `validatorctl ir export user.ir.json --out user.schema.json`. The manifest goes to stderr; `--json` returns schema and manifest in one envelope for CI gates.
+
+The IR itself has a schema. `validatorctl ir contract` (or `jsonschema.Contract()`) prints the JSON Schema every serialized IR document conforms to, generated from the Go types so it cannot drift; non-Go tools validate and type IR files against it. `ir.Check` also lints every `pattern` rule: it must be valid RE2 *and* free of RE2-only syntax (inline flags, named groups, `\A`, `\z`, `\Q`, POSIX and Unicode classes) so the same regex runs unchanged in the browser.
 
 ## Frontend
 

@@ -116,7 +116,7 @@ var OrderSchema = vb.Struct("Order",
 			vb.F(fEvKind, vb.String().Const("offline")),
 			vb.F(fEvAddr, vb.Ptr(vb.Ref(AddressSchema))),
 		))),
-	vb.F(fPref, vb.Ptr(vb.String().Enum("a", "b"))).Upper().Default("a").Optional(),
+	vb.F(fPref, vb.Ptr(vb.String().Enum("A", "B"))).Upper().Default("a").Optional(),
 	vb.F(fHost, vb.String().Hostname().NotBlank()).Optional(),
 	vb.F(fVer, vb.String().Semver()).Optional(),
 	vb.F(fAddr, vb.String().IP().MAC()).Optional(),
@@ -146,16 +146,38 @@ var OrderSchema = vb.Struct("Order",
 // Registry serves the generated code's custom rules and conditions.
 type Registry struct{}
 
+// errNotVIP is the predicate's false. A sentinel, because a condition
+// evaluated false on every non-VIP order must not allocate an error each
+// time.
+var errNotVIP = errors.New("not vip")
+
+// vip is the gate predicate, typed on Order so the generated code's
+// rt.CondT reaches it without boxing.
+func vip(_ context.Context, o Order) error {
+	if strings.HasSuffix(o.Email, "@vip.example.com") {
+		return nil
+	}
+	return errNotVIP
+}
+
 // Func implements rt.Registry and interp.Funcs by reading OrderSchema's
 // registry and adding the "vip" predicate the gate names directly.
 func (Registry) Func(name string) (vb.Func, bool) {
 	if name == "vip" {
-		return func(_ context.Context, v any) error {
-			if o, ok := v.(Order); ok && strings.HasSuffix(o.Email, "@vip.example.com") {
-				return nil
+		return func(ctx context.Context, v any) error {
+			if o, ok := v.(Order); ok {
+				return vip(ctx, o)
 			}
-			return errors.New("not vip")
+			return errNotVIP
 		}, true
 	}
 	return OrderSchema.Func(name)
+}
+
+// TypedFunc implements rt.TypedRegistry, the allocation-free path.
+func (Registry) TypedFunc(name string) (any, bool) {
+	if name == "vip" {
+		return vip, true
+	}
+	return OrderSchema.TypedFunc(name)
 }

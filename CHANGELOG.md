@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `jsonschema.Contract()` and `validatorctl ir contract`: the JSON Schema of the IR wire format, generated from the Go types; the `examples` module proves the golden IR documents conform and malformed ones do not.
+- `ir.CheckPattern`, wired into `ir.Check`: every `pattern` rule must be valid RE2 and free of RE2-only syntax so it runs unchanged under ECMA-262.
+- Coercion modes in `interp`: `Lax()`, `Strict()`, `WithCoerce(mode)`; field marker `vb.Field.NoCoerce()` (IR transform kind `strict`). Field markers beat call options.
+- RFC 3339 strings for `time.Time` fields on `map[string]any` input are parsed and written back.
+- `rt.CallT` / `rt.CondT` and `vb.Schema.TypedFunc`: generated code calls custom rules and gate predicates through the author's typed function, no boxing. Allocation-free fast paths for the email and URL formats. Generated success path: 0 allocs via `Validate<Type>Into`.
+- `validatorctl migrate` reports a specific reason and a suggested alternative for every known-unsupported tag (OR-groups, non-time cross-field comparisons, `excludes*`, `isdefault`, `unique=<field>`, non-RFC 3339 `datetime` layouts, format tags on non-strings).
 - `ir` package: the serializable rule-tree IR (`ubgo.validator.ir/v1`) — type nodes, rules, conditions, gated rules, portability classes, versioned JSON round-trip and structural `Check`.
 - `validatorctl` CLI skeleton with `version` and `ir check`.
 - Rule vocabulary: creditCard, jwt, countryCode, currencyCode, hexColor, e164, latitude, longitude.

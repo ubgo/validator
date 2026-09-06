@@ -9,6 +9,7 @@ import (
 
 	"github.com/ubgo/validator/cli/outfmt"
 	"github.com/ubgo/validator/ir"
+	"github.com/ubgo/validator/jsonschema"
 )
 
 // checkReport is the data payload of `ir check`. Problems is a flat list so
@@ -25,7 +26,7 @@ func newIRCmd(a *app) *cobra.Command {
 		Use:   "ir",
 		Short: "Work with serialized IR documents",
 	}
-	cmd.AddCommand(newIRCheckCmd(a), newIRExportCmd(a))
+	cmd.AddCommand(newIRCheckCmd(a), newIRExportCmd(a), newIRContractCmd(a))
 	return cmd
 }
 
@@ -84,4 +85,28 @@ func flatten(err error) []string {
 		return out
 	}
 	return []string{err.Error()}
+}
+
+func newIRContractCmd(a *app) *cobra.Command {
+	return &cobra.Command{
+		Use:   "contract",
+		Short: "Print the JSON Schema of the IR wire format itself",
+		Long: `Prints the JSON Schema that every serialized IR document conforms to —
+the contract non-Go tools validate and type IR files against. Generated
+from the Go types, so it cannot drift from them.`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			doc := jsonschema.Contract()
+			if a.printer.JSON {
+				return a.printer.OK(doc)
+			}
+			out, err := json.MarshalIndent(doc, "", "  ")
+			if err != nil {
+				_ = a.printer.Fail(outfmt.CodeInvalid, err)
+				return failure(err)
+			}
+			_, _ = a.printer.Out.Write(append(out, '\n'))
+			return nil
+		},
+	}
 }

@@ -178,8 +178,8 @@ func TestUnsupportedIsReported(t *testing.T) {
 		got[i] = u.String()
 	}
 	want := []string{
-		`Signup.Weird: "eqfield=Name" — no IR equivalent`,
-		`Signup.Weird: "isdefault" — no IR equivalent`,
+		`Signup.Weird: "eqfield=Name" — cross-field comparison on a non-time field needs the CEL layer (v2); express it as a Requires gate or a custom rule`,
+		`Signup.Weird: "isdefault" — isdefault has no portable meaning (frontend cannot know Go zero values); use a const rule or a custom rule`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("unsupported:\n%s", strings.Join(got, "\n"))
@@ -434,5 +434,34 @@ func TestBuilderRendering(t *testing.T) {
 	}
 	if intLit("x") != "x" || numLit(2) != "2" || anyLit(2) != "2" || len(sortedKeys(map[string]int{"b": 1, "a": 2})) != 2 {
 		t.Error("literal fallbacks")
+	}
+}
+
+func TestUnsupportedReasons(t *testing.T) {
+	str := &ir.StringNode{}
+	num := &ir.IntNode{}
+	cases := []struct {
+		tag  tagItem
+		node ir.TypeNode
+		want string
+	}{
+		{tagItem{name: "required_if", raw: "required_if=A|B"}, str, "OR-groups"},
+		{tagItem{name: "gtfield", value: "X"}, &ir.TimeNode{}, "only gtfield/ltfield on time"},
+		{tagItem{name: "nefield", value: "X"}, num, "CEL layer"},
+		{tagItem{name: "excludes", value: "x"}, str, "lookahead"},
+		{tagItem{name: "isdefault"}, str, "no portable meaning"},
+		{tagItem{name: "unique", value: "ID"}, &ir.ArrayNode{}, "slices of structs"},
+		{tagItem{name: "unique"}, str, "slices only"},
+		{tagItem{name: "datetime", value: "Jan 2"}, str, "RFC 3339"},
+		{tagItem{name: "dive"}, str, "slices and maps"},
+		{tagItem{name: "required_with"}, str, "malformed"},
+		{tagItem{name: "email"}, num, "non-string field"},
+		{tagItem{name: "alpha"}, num, "non-string field"},
+		{tagItem{name: "whatever"}, str, "no IR equivalent"},
+	}
+	for _, c := range cases {
+		if got := unsupportedReason(c.tag, c.node); !strings.Contains(got, c.want) {
+			t.Errorf("%s: %q lacks %q", c.tag.name, got, c.want)
+		}
 	}
 }

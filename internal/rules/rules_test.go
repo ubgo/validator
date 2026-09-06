@@ -1,6 +1,9 @@
 package rules
 
 import (
+	"math/rand/v2"
+	"net/mail"
+	"net/url"
 	"reflect"
 	"regexp"
 	"testing"
@@ -175,5 +178,63 @@ func TestMoreFormats(t *testing.T) {
 		if _, err := regexp.Compile(pat); err != nil {
 			t.Errorf("%s pattern is not RE2: %v", name, err)
 		}
+	}
+}
+
+// TestFastPathsAreSubsets pins the fast-path contract: whatever emailFast
+// or urlFast accepts, the reference implementation accepts too, so the
+// public answer never depends on which path ran. Random strings over the
+// relevant alphabets plus a corpus of edge cases.
+func TestFastPathsAreSubsets(t *testing.T) {
+	refEmail := func(s string) bool { a, err := mail.ParseAddress(s); return err == nil && a.Address == s }
+	refURL := func(s string) bool { u, err := url.Parse(s); return err == nil && u.Scheme != "" && u.Host != "" }
+	corpus := []string{
+		"a@b", "a@b.c", "a.b@c.d", ".a@b", "a.@b", "a..b@c", "a@.b", "a@b.", "a@b..c", "@b", "a@", "a@@b", "a b@c",
+		"a@b_c", "\"q\"@b", "a@[1.2.3.4]", "ünï@b.c", "a@b-c.d", "a@-b", "a!#$%&'*+-/=?^_`{|}~@x.y",
+		"https://x.io/p", "http://x", "x://y", "1x://y", "https://", "https:///p", "https://x.io:80/p?q=1#f", "https://x.io:/p",
+		"https://x.io/%zz", "https://x.io/%2F", "https://x.io/a b", "https://[::1]/", "https://x.io/p\x7f", "ftp://a.b/c;d=e",
+		"https://x.io?q", "https://x.io#f", "https://x..io", "https://x.io./", "mailto:a@b", "//x.io/p", "https://x.io/p?q=a%2",
+	}
+	// Fixed seed so a failure reproduces; the sizes are large enough to
+	// reach every branch of both scanners several times per run.
+	const fuzzCases, fuzzMaxLen = 20000, 24
+	r := rand.New(rand.NewPCG(1, 2))
+	alphabet := []byte("abcAZ09.@-_!#%:/?&=+~()[]{} \"'\\`|^$*,;\x7f\u00ff")
+	for range fuzzCases {
+		n := r.IntN(fuzzMaxLen)
+		b := make([]byte, n)
+		for i := range b {
+			b[i] = alphabet[r.IntN(len(alphabet))]
+		}
+		corpus = append(corpus, string(b), "https://"+string(b), "a@"+string(b))
+	}
+	for _, s := range corpus {
+		if emailFast(s) && !refEmail(s) {
+			t.Errorf("emailFast accepts %q, net/mail does not", s)
+		}
+		if urlFast(s) && !refURL(s) {
+			t.Errorf("urlFast accepts %q, net/url does not", s)
+		}
+		// And the public functions agree with the reference exactly.
+		if Email(s) != refEmail(s) {
+			t.Errorf("Email(%q) = %v, reference %v", s, Email(s), refEmail(s))
+		}
+		if URL(s) != refURL(s) {
+			t.Errorf("URL(%q) = %v, reference %v", s, URL(s), refURL(s))
+		}
+	}
+	// The common shapes take the fast path and do not allocate.
+	for _, s := range []string{"ada@example.com", "a.b+tag@sub.example.co"} {
+		if !emailFast(s) {
+			t.Errorf("emailFast(%q) should hit", s)
+		}
+	}
+	for _, s := range []string{"https://x.io", "https://x.io/p?q=1&r=%20#frag", "http://localhost:8080/"} {
+		if !urlFast(s) {
+			t.Errorf("urlFast(%q) should hit", s)
+		}
+	}
+	if n := testing.AllocsPerRun(200, func() { Email("ada@example.com"); URL("https://x.io/p") }); n != 0 {
+		t.Errorf("fast paths allocate %.1f", n)
 	}
 }

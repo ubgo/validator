@@ -30,6 +30,8 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/ubgo/validator/internal/rules"
 	"github.com/ubgo/validator/ir"
@@ -52,6 +54,36 @@ func FailFast() Option { return func(v *Validator) { v.failFast = true } }
 // references any; [New] errors on an unresolved name.
 func WithFuncs(f Funcs) Option { return func(v *Validator) { v.lookup = f } }
 
+// CoerceMode says how string values in map input meet non-string nodes.
+// Struct input is never coerced: a typed field already has its type.
+type CoerceMode int
+
+const (
+	// CoerceMarked coerces only fields carrying the coerce transform. The
+	// default: what the schema says, nothing more.
+	CoerceMarked CoerceMode = iota
+
+	// CoerceLax coerces every int, float, bool, time and duration field
+	// except those marked strict — the mode for form-encoded or query
+	// input, where everything arrives as a string.
+	CoerceLax
+
+	// CoerceStrict coerces nothing that is not explicitly marked. Today it
+	// behaves as CoerceMarked; it exists so a caller can name the intent
+	// and so a future default of Lax has an opt-out. A field's own coerce
+	// marker still wins, because field markers beat call options.
+	CoerceStrict
+)
+
+// Lax runs the validator in [CoerceLax] mode.
+func Lax() Option { return func(v *Validator) { v.coerce = CoerceLax } }
+
+// Strict runs the validator in [CoerceStrict] mode.
+func Strict() Option { return func(v *Validator) { v.coerce = CoerceStrict } }
+
+// WithCoerce sets the coercion mode explicitly.
+func WithCoerce(m CoerceMode) Option { return func(v *Validator) { v.coerce = m } }
+
 // rootPath is the JSONPath of the value under validation.
 const rootPath = "$"
 
@@ -60,6 +92,7 @@ const rootPath = "$"
 type Validator struct {
 	schema   *ir.Schema
 	failFast bool
+	coerce   CoerceMode
 	lookup   Funcs
 	funcs    map[string]vb.Func
 	regex    map[string]*regexp.Regexp
@@ -269,6 +302,18 @@ func (r *run) node(path string, n ir.TypeNode, val reflect.Value, sc *scope) {
 		}
 		return
 	}
+	// JSON has no time type: an RFC 3339 string is a time's wire form, so a
+	// string arriving for a time node is parsed rather than rejected. It is
+	// written back when the container is a map[string]any, matching what
+	// transforms do, so callers see the typed value afterwards.
+	if _, isTime := n.(*ir.TimeNode); isTime && val.Kind() == reflect.String {
+		if parsed, err := time.Parse(time.RFC3339, val.String()); err == nil {
+			val = reflect.ValueOf(parsed)
+			if sc != nil && isStringMap(sc.val) && sc.val.Type() == anyMapType {
+				sc.val.SetMapIndex(reflect.ValueOf(lastSegment(path)), val)
+			}
+		}
+	}
 	if want := kindMismatch(n, val); want != "" {
 		r.typeIssue(path, want, val)
 		return
@@ -319,6 +364,16 @@ func (r *run) node(path string, n ir.TypeNode, val reflect.Value, sc *scope) {
 func (r *run) typeIssue(path, want string, val reflect.Value) {
 	r.structural(path, verr.CodeType, "expected "+want+", got "+val.Kind().String(),
 		map[string]any{"expected": want, "actual": val.Kind().String()})
+}
+
+// lastSegment returns the final key of a dotted path ("$.a.b" → "b"), the
+// map key a field value lives under. Field paths are built from wire
+// names, which never contain dots for map input produced by JSON.
+func lastSegment(path string) string {
+	if i := strings.LastIndexByte(path, '.'); i >= 0 {
+		return path[i+1:]
+	}
+	return path
 }
 
 // object validates a struct or map[string]any against an object node; the
@@ -474,7 +529,34 @@ func (r *run) targetRule(sc *scope, tr ir.TargetRule) {
 // else is refused at New.
 var transformKinds = map[ir.TransformKind]struct{}{
 	ir.TransformTrim: {}, ir.TransformLower: {}, ir.TransformUpper: {}, ir.TransformDefault: {},
-	ir.TransformCoerce: {}, ir.TransformNormalizeEmail: {},
+	ir.TransformCoerce: {}, ir.TransformStrict: {}, ir.TransformNormalizeEmail: {},
+}
+
+// shouldCoerce resolves the per-field markers against the validator's
+// mode. Precedence: field marker (coerce / strict) > call option > the
+// marked-only default. Both markers on one field is a schema bug; strict
+// wins so the careless path is the correct one.
+func (v *Validator) shouldCoerce(f *ir.FieldNode) bool {
+	marked, strict := false, false
+	for _, t := range f.Transforms {
+		if t.Phase != ir.PhasePre {
+			continue
+		}
+		switch t.Kind {
+		case ir.TransformCoerce:
+			marked = true
+		case ir.TransformStrict:
+			strict = true
+		}
+	}
+	switch {
+	case strict:
+		return false
+	case marked:
+		return true
+	default:
+		return v.coerce == CoerceLax
+	}
 }
 
 // transform applies pre-phase transforms, writing back when the target is
@@ -486,23 +568,18 @@ var transformKinds = map[ir.TransformKind]struct{}{
 // A struct field already has the right type, so coerce is a no-op there —
 // the same reason generated code emits nothing for it.
 func (r *run) transform(parent reflect.Value, f ir.FieldNode, child reflect.Value) reflect.Value {
-	if len(f.Transforms) == 0 {
+	if len(f.Transforms) == 0 && r.v.coerce != CoerceLax {
 		return child
 	}
 	inner, isNil := deref(child)
 	if isNil {
 		return child
 	}
-	for _, t := range f.Transforms {
-		if t.Phase != ir.PhasePre || t.Kind != ir.TransformCoerce {
-			continue
-		}
-		if inner.Kind() == reflect.String && isStringMap(parent) && parent.Type() == anyMapType {
-			if coerced, ok := rules.Coerce(f.Type.Kind(), inner.String()); ok {
-				out := reflect.ValueOf(coerced)
-				parent.SetMapIndex(reflect.ValueOf(wireName(&f)), out)
-				return out
-			}
+	if inner.Kind() == reflect.String && r.v.shouldCoerce(&f) && isStringMap(parent) && parent.Type() == anyMapType {
+		if coerced, ok := rules.Coerce(f.Type.Kind(), inner.String()); ok {
+			out := reflect.ValueOf(coerced)
+			parent.SetMapIndex(reflect.ValueOf(wireName(&f)), out)
+			return out
 		}
 	}
 	if inner.Kind() != reflect.String {

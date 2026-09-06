@@ -79,7 +79,11 @@ type registry struct {
 // while two different bodies under one name are reported.
 type funcEntry struct {
 	fn Func
-	id uint64
+	// raw is the author's function with its own signature
+	// (func(context.Context, V) error), kept so an executor that knows V
+	// statically can call it without boxing the value through any.
+	raw any
+	id  uint64
 }
 
 // nextFuncID hands out registration identities. A package-level counter is
@@ -204,8 +208,14 @@ func (f Field[T]) Lower() Field[T] { return f.transform(ir.TransformLower, ir.Ph
 // Upper upper-cases before validation.
 func (f Field[T]) Upper() Field[T] { return f.transform(ir.TransformUpper, ir.PhasePre, nil) }
 
-// Coerce enables lax string→typed conversion before validation.
+// Coerce enables lax string→typed conversion before validation on map
+// input, whatever coercion mode the executor runs in.
 func (f Field[T]) Coerce() Field[T] { return f.transform(ir.TransformCoerce, ir.PhasePre, nil) }
+
+// NoCoerce pins the field to its declared type even when the executor runs
+// in lax mode: a string where an int is expected is a type mismatch, never
+// converted. Field markers beat call options in both directions.
+func (f Field[T]) NoCoerce() Field[T] { return f.transform(ir.TransformStrict, ir.PhasePre, nil) }
 
 // NormalizeEmail canonicalizes an address before validation.
 func (f Field[T]) NormalizeEmail() Field[T] {
@@ -350,6 +360,15 @@ func (s *Schema[T]) Funcs() []NamedFunc {
 func (s *Schema[T]) Func(name string) (Func, bool) {
 	entry, ok := s.reg.funcs[name]
 	return entry.fn, ok
+}
+
+// TypedFunc returns the author's function as registered, before the [Func]
+// wrapper: a func(context.Context, V) error for the builder's V. Generated
+// code asserts it to the field's static type and calls it directly, which
+// is the allocation-free path; [Func] stays the universal one.
+func (s *Schema[T]) TypedFunc(name string) (any, bool) {
+	entry, ok := s.reg.funcs[name]
+	return entry.raw, ok
 }
 
 // Getter returns the access path for a root field by Go name.

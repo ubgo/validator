@@ -90,12 +90,12 @@ func Emit(s *ir.Schema, opts ...Option) (*Result, error) {
 		o(e)
 	}
 	root := NewObject()
-	root.Set("$schema", string(e.draft))
+	root.Set(kwSchema, string(e.draft))
 	if e.id != "" {
-		root.Set("$id", e.id)
+		root.Set(kwID, e.id)
 	}
 	if s.Meta.Title != "" {
-		root.Set("title", s.Meta.Title)
+		root.Set(kwTitle, s.Meta.Title)
 	}
 	body := e.node(rootPath, s.Root)
 	root.Merge(body)

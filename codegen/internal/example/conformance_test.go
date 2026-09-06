@@ -25,6 +25,16 @@ func validOrder() Order {
 		Lines:   []Line{{Sku: "123e4567-e89b-12d3-a456-426614174000", Qty: 1}},
 		Type:    "online", URL: "https://x.io",
 		Nick: "ada", Event: Event{Kind: "online", URL: "https://e.io"},
+		Pref: ptr("a"), Units: 1,
+	}
+}
+
+// TestValidOrderIsValid pins the benchmark fixture: BenchmarkGenerated
+// measures the success path only while this holds.
+func TestValidOrderIsValid(t *testing.T) {
+	o := validOrder()
+	if got := key(ValidateOrder(context.Background(), &o, Registry{})); len(got) != 0 {
+		t.Fatalf("validOrder is not valid: %v", got)
 	}
 }
 
@@ -157,6 +167,19 @@ func BenchmarkGenerated(b *testing.B) {
 	}
 }
 
+// BenchmarkGeneratedInto is the success path with a caller-owned issue
+// list: the one allocation left in BenchmarkGenerated is the result
+// object itself.
+func BenchmarkGeneratedInto(b *testing.B) {
+	o := validOrder()
+	errs := &verr.Errors{}
+	b.ReportAllocs()
+	for b.Loop() {
+		errs.Issues = errs.Issues[:0]
+		ValidateOrderInto(context.Background(), &o, Registry{}, errs)
+	}
+}
+
 func BenchmarkInterpreter(b *testing.B) {
 	v, _ := interp.New(OrderSchema.IR(), interp.WithFuncs(Registry{}))
 	o := validOrder()
@@ -165,3 +188,5 @@ func BenchmarkInterpreter(b *testing.B) {
 		_ = v.Run(context.Background(), &o)
 	}
 }
+
+func ptr[T any](v T) *T { return &v }

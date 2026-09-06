@@ -39,7 +39,7 @@ For each manifest entry of class `server`, `validateAsync` POSTs `{ rule, value 
 
 | Option | Purpose |
 |---|---|
-| `manifest` | The portability manifest emitted with the schema. Pass it whenever one exists. |
+| `manifest` | The portability manifest emitted with the schema. Pass it whenever one exists. A `coerce` entry turns on Ajv `coerceTypes` for the whole schema; a `strict` entry (a field pinned with `NoCoerce()` in Go) cannot be exempted per property by Ajv, so it is reported through `onNonPortable` and enforced by the server. |
 | `onNonPortable` | Hook per entry the browser cannot run. Default warns once via `console.warn`. |
 | `serverRules` | Enable server round-trips. Default: true when the manifest has server entries. |
 | `baseURL` | Prefix for relative endpoints. |

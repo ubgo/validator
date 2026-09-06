@@ -444,3 +444,14 @@ func TestCatalog(t *testing.T) {
 		t.Errorf("bad catalog: code=%d out=%q", code, out)
 	}
 }
+
+func TestIRContract(t *testing.T) {
+	code, out, _ := run(t, "ir", "contract")
+	if code != ExitOK || !strings.Contains(out, `"$id": "https://ubgo.dev/schemas/validator-ir-v1.json"`) || !strings.Contains(out, `"TypeNode"`) {
+		t.Fatalf("code=%d out=%q", code, out[:200])
+	}
+	code, out, _ = run(t, "ir", "contract", "--json")
+	if code != ExitOK || !strings.Contains(out, `"ok":true`) {
+		t.Fatalf("json: code=%d", code)
+	}
+}

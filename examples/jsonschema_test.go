@@ -252,3 +252,51 @@ func TestExecutorsAgreeWithIndependentValidator(t *testing.T) {
 	}
 	_ = strings.TrimSpace
 }
+
+// TestIRDocumentsConformToTheContract validates real IR documents against
+// the contract schema with the independent validator: the golden user.json
+// must pass, and documents with an unknown kind or a missing version must
+// fail. This is the proof that the contract describes the wire format.
+func TestIRDocumentsConformToTheContract(t *testing.T) {
+	contractDoc, err := json.Marshal(vjs.Contract())
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract := compile(t, contractDoc, vjs.ContractID)
+	golden, err := os.ReadFile(filepath.Join("..", "ir", "testdata", "user.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc any
+	if err := json.Unmarshal(golden, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if err := contract.Validate(doc); err != nil {
+		t.Fatalf("golden IR does not conform to the contract: %v", err)
+	}
+	// Every example IR the repo ships must conform too.
+	for _, extra := range []string{filepath.Join("..", "tags", "internal", "example", "signup.ir.json")} {
+		raw, err := os.ReadFile(extra)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var d any
+		_ = json.Unmarshal(raw, &d)
+		if err := contract.Validate(d); err != nil {
+			t.Errorf("%s does not conform: %v", extra, err)
+		}
+	}
+	for name, bad := range map[string]string{
+		"unknown kind":    `{"version":"ubgo.validator.ir/v1","root":{"kind":"decimal"}}`,
+		"missing version": `{"root":{"kind":"any"}}`,
+		"wrong version":   `{"version":"v0","root":{"kind":"any"}}`,
+		"extra node key":  `{"version":"ubgo.validator.ir/v1","root":{"kind":"string","bogus":1}}`,
+		"bad rule shape":  `{"version":"ubgo.validator.ir/v1","root":{"kind":"string","rules":[{"params":{}}]}}`,
+	} {
+		var d any
+		_ = json.Unmarshal([]byte(bad), &d)
+		if err := contract.Validate(d); err == nil {
+			t.Errorf("%s: contract accepted an invalid document", name)
+		}
+	}
+}
