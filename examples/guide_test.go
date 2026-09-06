@@ -9,9 +9,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -327,6 +329,290 @@ func TestGuideEmbedsFiles(t *testing.T) {
 		}
 		if !strings.Contains(string(guide), strings.TrimRight(string(src), "\n")) {
 			t.Errorf("docs/GUIDE.md does not embed %s verbatim", rel)
+		}
+	}
+}
+
+// --- GUIDE §4.11 Unknown keys --------------------------------------------------
+
+func TestGuideUnknownKeys(t *testing.T) {
+	type Tiny struct {
+		Name string `json:"name"`
+	}
+	name := vb.NewField("Name", func(x Tiny) string { return x.Name }).JSON("name")
+	strict := vb.Struct("Tiny", vb.F(name, vb.String())).Extra(ir.ExtraForbid).MustBuild()
+	v, _ := interp.FromSchema(strict)
+	errs := v.Run(context.Background(), map[string]any{"name": "a", "typo": 1})
+	if errs.Len() != 1 || errs.Issues[0].Code != verr.CodeUnknownKey || errs.Issues[0].Path != "$.typo" {
+		t.Errorf("forbid: %v", errs)
+	}
+	// Struct input has no unknown keys to reject; the policy is about maps.
+	if err := v.Validate(context.Background(), &Tiny{Name: "a"}); err != nil {
+		t.Error(err)
+	}
+}
+
+// --- GUIDE §4.4 Custom gate predicates ------------------------------------------------
+
+// vipRegistry answers the schema's own names and adds the "vip" predicate
+// a gate refers to by name. Both interp.WithFuncs and generated code accept
+// it: it implements Func (and, for generated code, TypedFunc).
+type vipRegistry struct{ base *vb.Schema[signup.Signup] }
+
+func (r vipRegistry) Func(name string) (vb.Func, bool) {
+	if name == "vip" {
+		return func(_ context.Context, v any) error {
+			if s, ok := v.(signup.Signup); ok && strings.HasSuffix(s.Email, "@vip.example.com") {
+				return nil
+			}
+			return errors.New("not vip")
+		}, true
+	}
+	return r.base.Func(name)
+}
+
+func TestGuideCustomPredicate(t *testing.T) {
+	gated := vb.Struct("Signup",
+		vb.F(signup.SignupFields.Email, vb.String().Email()),
+		vb.F(signup.SignupFields.Age, vb.Int[int]()),
+	).Gate(
+		// Non-VIPs must be 21+; the predicate is Go-only and lands in the manifest.
+		vb.When(ir.CustomCond("vip"), nil, []ir.TargetRule{vb.On(signup.SignupFields.Age, ir.Min(21))}),
+	).MustBuild()
+	v, err := interp.New(gated.IR(), interp.WithFuncs(vipRegistry{base: gated}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := v.Validate(context.Background(), &signup.Signup{Email: "a@vip.example.com", Age: 18}); err != nil {
+		t.Errorf("vip: %v", err)
+	}
+	if err := v.Validate(context.Background(), &signup.Signup{Email: "a@example.com", Age: 18}); err == nil {
+		t.Error("non-vip under 21 passed")
+	}
+	// Without a registry that knows "vip", New refuses instead of guessing.
+	if _, err := interp.FromSchema(gated); err == nil {
+		t.Error("unresolved predicate accepted")
+	}
+}
+
+// --- GUIDE §4.5 OneOf default case -----------------------------------------------------
+
+func TestGuideOneOfDefault(t *testing.T) {
+	type Event struct {
+		Kind string `json:"kind"`
+		URL  string `json:"url"`
+	}
+	kind := vb.NewField("Kind", func(e Event) string { return e.Kind }).JSON("kind")
+	url := vb.NewField("URL", func(e Event) string { return e.URL }).JSON("url")
+	type Doc struct {
+		Event Event `json:"event"`
+	}
+	ev := vb.NewField("Event", func(d Doc) Event { return d.Event }).JSON("event")
+	s := vb.Struct("Doc", vb.F(ev, vb.OneOf[Event]("kind").
+		Case("online", vb.Object(vb.F(kind, vb.String().Const("online")), vb.F(url, vb.String().URL()))).
+		Default(vb.Object(vb.F(kind, vb.String()), vb.F(url, vb.String()).Optional())))).MustBuild()
+	v, _ := interp.FromSchema(s)
+	if err := v.Validate(context.Background(), &Doc{Event: Event{Kind: "other"}}); err != nil {
+		t.Errorf("default case: %v", err)
+	}
+	if err := v.Validate(context.Background(), &Doc{Event: Event{Kind: "online", URL: "nope"}}); err == nil {
+		t.Error("online case not applied")
+	}
+}
+
+// --- GUIDE §4.8 Results: RunIntoAt, ByPath, OrNil --------------------------------------------
+
+func TestGuideResults(t *testing.T) {
+	v, _ := interp.FromSchema(signup.Schema)
+	errs := &verr.Errors{}
+	v.RunIntoAt(context.Background(), &signup.Signup{}, "$.body", errs)
+	if errs.Issues[0].Path != "$.body.email" {
+		t.Errorf("RunIntoAt path: %s", errs.Issues[0].Path)
+	}
+	byPath := errs.ByPath()
+	if len(byPath["$.body.email"]) != 1 {
+		t.Errorf("ByPath: %v", byPath)
+	}
+	var none *verr.Errors
+	if none.OrNil() != nil || none.Len() != 0 {
+		t.Error("nil-safety")
+	}
+	// Build reports every problem at once instead of panicking.
+	bad := vb.NewField("Email", func(s signup.Signup) string { return s.Email })
+	if _, err := vb.Struct("Bad", vb.F(bad, vb.String().Pattern("(")), vb.F(bad, vb.String())).Build(); err == nil {
+		t.Error("Build accepted an invalid regex and a duplicate field")
+	}
+}
+
+// --- GUIDE §4.9 Endpoints and rulehttp options ------------------------------------------------
+
+func TestGuideEndpointsAndOptions(t *testing.T) {
+	eps := signup.Schema.Endpoints()
+	if len(eps) != 1 || eps[0].Rule != "email_free" || eps[0].Path != "/v/email_free" {
+		t.Fatalf("endpoints: %+v", eps)
+	}
+	h, err := rulehttp.FromSchema(signup.Schema,
+		rulehttp.WithMaxBody(256),
+		rulehttp.WithLimiter(rulehttp.NoLimit),
+		rulehttp.WithAuthorize(func(r *http.Request) error {
+			if r.Header.Get("Authorization") != "Bearer secret" {
+				return errors.New("no token")
+			}
+			return nil
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	h.Mount(mux)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	// Unauthorized: a transport error, not a validation issue.
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v/email_free", strings.NewReader(`{"rule":"email_free","value":"x"}`))
+	resp, _ := http.DefaultClient.Do(req)
+	var body rulehttp.Response
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden || body.OK || body.Error == nil || body.Error.Code != rulehttp.CodeUnauthorized {
+		t.Errorf("authorize: %d %+v", resp.StatusCode, body)
+	}
+	// Authorized and valid.
+	req, _ = http.NewRequest(http.MethodPost, srv.URL+"/v/email_free", strings.NewReader(`{"rule":"email_free","value":"new@example.com"}`))
+	req.Header.Set("Authorization", "Bearer secret")
+	resp, _ = http.DefaultClient.Do(req)
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	resp.Body.Close()
+	if !body.OK {
+		t.Errorf("valid: %+v", body)
+	}
+	// Custom (opaque) rules are never served.
+	req, _ = http.NewRequest(http.MethodPost, srv.URL+"/v/not_reserved", strings.NewReader(`{"rule":"not_reserved","value":"x"}`))
+	req.Header.Set("Authorization", "Bearer secret")
+	resp, _ = http.DefaultClient.Do(req)
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		t.Error("custom rule served over HTTP")
+	}
+}
+
+// --- GUIDE §4.10 Catalog checks --------------------------------------------------------
+
+func TestGuideCatalogChecks(t *testing.T) {
+	de, _ := i18n.Load(strings.NewReader(`{"locale":"de","messages":{"min_length":"mindestens {value} Zeichen"}}`))
+	if missing := de.Missing(); len(missing) == 0 || len(missing) != len(i18n.Codes())-1 {
+		t.Errorf("Missing: %d of %d", len(missing), len(i18n.Codes()))
+	}
+	if len(i18n.Merge(i18n.Default(), de).Missing()) != 0 {
+		t.Error("merged catalog still missing codes")
+	}
+	if verr.Render("at least {value} chars", map[string]any{"value": 3}) != "at least 3 chars" {
+		t.Error("Render")
+	}
+}
+
+// --- GUIDE §5 Draft-07, manifest queries, contract ------------------------------------------
+
+func TestGuideExportOptions(t *testing.T) {
+	res, err := jsonschema.Emit(signup.Schema.IR(), jsonschema.WithDraft(jsonschema.Draft07))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := res.JSON()
+	if !strings.Contains(string(doc), string(jsonschema.Draft07)) {
+		t.Error("draft-07 dialect not set")
+	}
+	if res.Manifest.Portable() {
+		t.Error("signup has non-portable rules")
+	}
+	by := res.Manifest.ByClass()
+	if len(by[jsonschema.ClassServer]) != 1 || len(by[jsonschema.ClassOpaque]) != 1 || len(by[jsonschema.ClassLossy]) != 2 || len(by[jsonschema.ClassCEL]) != 1 {
+		t.Errorf("ByClass: %v", by)
+	}
+	if _, ok := jsonschema.Contract().Get("$defs"); !ok {
+		t.Error("contract has no defs")
+	}
+	// Hand-written IR: decode, check, run — the same path a non-Go tool takes.
+	raw, _ := json.Marshal(signup.Schema.IR())
+	var hand ir.Schema
+	if err := json.Unmarshal(raw, &hand); err != nil {
+		t.Fatal(err)
+	}
+	if err := ir.Check(&hand); err != nil {
+		t.Fatal(err)
+	}
+	// CEL is declared in the IR but refused by the executors today.
+	cel := &ir.Schema{Version: ir.Version, Root: &ir.ObjectNode{Gated: []ir.GatedRules{{Cond: &[]ir.Condition{ir.Expr("1 == 1")}[0]}}}}
+	if _, err := interp.New(cel); err == nil {
+		t.Error("CEL accepted")
+	}
+}
+
+// TestGuideProgramsCompile extracts every ```go block in docs/GUIDE.md that
+// is a whole program (starts with "package main") and builds it inside
+// this module, so a snippet that names a wrong identifier fails CI. The
+// files under guide/ are covered by the ordinary build; this covers the
+// programs that exist only in the guide.
+func TestGuideProgramsCompile(t *testing.T) {
+	guide, err := os.ReadFile(filepath.Join("..", "docs", "GUIDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join("guide", "snippettmp") // no leading dot: "..." patterns skip those
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	var n int
+	var pkgs []string
+	for _, block := range strings.Split(string(guide), "```go\n")[1:] {
+		src, _, _ := strings.Cut(block, "\n```")
+		if !strings.HasPrefix(src, "package main") {
+			continue
+		}
+		n++
+		sub := filepath.Join(dir, fmt.Sprintf("p%02d", n))
+		if err := os.MkdirAll(sub, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(sub, "main.go"), []byte(src+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		pkgs = append(pkgs, "./"+filepath.ToSlash(sub))
+	}
+	if n == 0 {
+		t.Fatal("no programs found in the guide")
+	}
+	cmd := exec.Command("go", append([]string{"vet"}, pkgs...)...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("guide programs do not compile:\n%s", out)
+	}
+	t.Logf("%d guide programs compiled", n)
+}
+
+// TestGuideGeneratedMatchesInterpreter runs the generated ValidateSignup
+// (guide/signup/validate.gen.go, from `go generate`) and the interpreter on
+// the same inputs: the guide's claim that switching executors changes
+// nothing is checked here for the guide's own schema.
+func TestGuideGeneratedMatchesInterpreter(t *testing.T) {
+	v, _ := interp.FromSchema(signup.Schema)
+	inputs := []signup.Signup{
+		{},
+		{Email: "  Ada@Example.com ", Password: "short", Age: 17, Plan: "team"},
+		{Email: "admin@example.com", Password: "correct horse", Age: 30, Plan: "free", Starts: time.Now(), Ends: time.Now().Add(time.Hour)},
+		{Email: "ada@example.com", Password: "correct horse", Age: 30, Plan: "free", Starts: time.Now(), Ends: time.Now().Add(time.Hour)},
+	}
+	for i, in := range inputs {
+		a, b := in, in
+		got := signup.ValidateSignup(context.Background(), &a, signup.Schema)
+		want := v.Run(context.Background(), &b)
+		gj, _ := json.Marshal(got.ByPath())
+		wj, _ := json.Marshal(want.ByPath())
+		if string(gj) != string(wj) {
+			t.Errorf("input %d: generated %s\ninterpreter %s", i, gj, wj)
+		}
+		if a.Email != b.Email {
+			t.Errorf("input %d: transforms differ: %q vs %q", i, a.Email, b.Email)
 		}
 	}
 }

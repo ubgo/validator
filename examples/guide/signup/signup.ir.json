@@ -1,0 +1,224 @@
+{
+  "version": "ubgo.validator.ir/v1",
+  "root": {
+    "kind": "object",
+    "fields": [
+      {
+        "name": "Email",
+        "json": "email",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "email"
+            },
+            {
+              "kind": "custom",
+              "params": {
+                "ref": "not_reserved"
+              },
+              "portable": "opaque"
+            },
+            {
+              "kind": "async",
+              "params": {
+                "endpoint": "/v/email_free",
+                "ref": "email_free"
+              },
+              "portable": "server"
+            }
+          ]
+        },
+        "transforms": [
+          {
+            "kind": "trim",
+            "phase": "pre"
+          },
+          {
+            "kind": "lower",
+            "phase": "pre"
+          }
+        ]
+      },
+      {
+        "name": "Password",
+        "json": "password",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "minLength",
+              "params": {
+                "value": 8
+              }
+            },
+            {
+              "kind": "maxLength",
+              "params": {
+                "value": 72
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Age",
+        "json": "age",
+        "type": {
+          "kind": "int",
+          "rules": [
+            {
+              "kind": "min",
+              "params": {
+                "value": 18
+              }
+            },
+            {
+              "kind": "max",
+              "params": {
+                "value": 120
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Plan",
+        "json": "plan",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "enum",
+              "params": {
+                "values": [
+                  "free",
+                  "pro",
+                  "team"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Website",
+        "json": "website",
+        "type": {
+          "kind": "string",
+          "nullable": true,
+          "rules": [
+            {
+              "kind": "url"
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Tags",
+        "json": "tags",
+        "type": {
+          "kind": "array",
+          "elem": {
+            "kind": "string",
+            "rules": [
+              {
+                "kind": "minLength",
+                "params": {
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "rules": [
+            {
+              "kind": "maxItems",
+              "params": {
+                "value": 5
+              }
+            },
+            {
+              "kind": "unique"
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Starts",
+        "json": "starts",
+        "type": {
+          "kind": "time"
+        }
+      },
+      {
+        "name": "Ends",
+        "json": "ends",
+        "type": {
+          "kind": "time",
+          "rules": [
+            {
+              "kind": "after",
+              "params": {
+                "field": "Starts"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Company",
+        "json": "company",
+        "type": {
+          "kind": "string"
+        },
+        "optional": true
+      },
+      {
+        "name": "VATID",
+        "json": "vat_id",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "pattern",
+              "params": {
+                "regex": "^[A-Z]{2}[0-9A-Z]{8,12}$"
+              }
+            }
+          ]
+        },
+        "optional": true
+      }
+    ],
+    "gated": [
+      {
+        "kind": "requires",
+        "cond": {
+          "kind": "cmp",
+          "field": "Plan",
+          "op": "eq",
+          "value": "team"
+        },
+        "fields": [
+          "Company"
+        ]
+      },
+      {
+        "kind": "requires",
+        "cond": {
+          "kind": "presence",
+          "field": "VATID",
+          "op": "present"
+        },
+        "fields": [
+          "Company"
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "title": "Signup"
+  }
+}

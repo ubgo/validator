@@ -7,7 +7,7 @@ The files this guide shows live in `examples/guide/` and are compiled by the bui
 1. [What it is, in one picture](#1-what-it-is-in-one-picture)
 2. [Quickstart in five steps](#2-quickstart-in-five-steps)
 3. [The workflow, end to end](#3-the-workflow-end-to-end)
-4. [Authoring rules: every feature](#4-authoring-rules-every-feature)
+4. [Authoring rules: every feature](#4-authoring-rules-every-feature) (types, fields, nesting, gates, variants, map input, presence, results, custom and async, messages, unknown keys, foreign IR)
 5. [Exporting: JSON Schema, manifest, TypeScript](#5-exporting-json-schema-manifest-typescript)
 6. [The frontend runtime](#6-the-frontend-runtime)
 7. [Production: the generated executor](#7-production-the-generated-executor)
@@ -72,7 +72,12 @@ package signup
 
 import "time"
 
+// Regenerate everything derived from this package, in order: the field
+// accessors, the IR document, then the reflection-free validator.
+//
 //go:generate validatorctl fields
+//go:generate go run ../cmd/signup-export -dir .
+//go:generate validatorctl gen . --schema signup.ir.json
 
 // Signup is the request body of POST /signup. Nothing validator-specific
 // lives on the struct; rules are in rules.go.
@@ -191,7 +196,7 @@ var Schema = vb.Struct("Signup",
 ).MustBuild()
 ```
 
-`MustBuild` checks the whole tree at startup: unknown rule kinds, invalid regexes, regex syntax that would not run in a browser, two different functions registered under one name. A broken schema fails at boot, not on the first request.
+`MustBuild` checks the whole tree at startup: unknown rule kinds, invalid regexes, regex syntax that would not run in a browser, two different functions registered under one name. A broken schema fails at boot, not on the first request. `Build()` is the same check returning an `error` that lists every problem at once, for tools that load schemas dynamically. `.Source("models/rules.go")` and `.Generator("myproject")` before `Build` record provenance in the IR's metadata.
 
 ### Step 5: validate in an HTTP handler
 
@@ -352,7 +357,7 @@ Every field gets a builder matching its Go type. The builder decides which rule 
 | `float32/64` | `vb.Float[float64]()` | same as int, plus `Latitude` `Longitude` |
 | `bool` | `vb.Bool()` | `Const` |
 | `[]byte` | `vb.Bytes()` | `MinLength` `MaxLength` (bytes) |
-| `time.Time` | `vb.Time()` | `With(vb.After(otherField))`, `With(vb.Before(otherField))` |
+| `time.Time` | `vb.Time()` | `With(vb.After(otherField))`, `With(vb.Before(otherField))`; `vb.AfterField("Starts")` / `vb.BeforeField` take the Go field name as a string, which is what the tag migration emits |
 | `time.Duration` | `vb.Duration()` | `Min` `Max` `Gt` `Lt` |
 | `[]E` | `vb.Array(elem)` | `MinItems` `MaxItems` `Unique` |
 | `map[K]V` | `vb.Map(key, val)` | `MinItems` `MaxItems` |
@@ -419,7 +424,59 @@ Conditions: `vb.Eq(ref, v)`, `vb.Cmp(ref, ir.OpGt, v)`, `vb.In(ref, a, b)`, `vb.
 )
 ```
 
-In JSON Schema these become `if`/`then`/`else` blocks, which Ajv runs natively. Arithmetic between fields (`end - start < 30 days`) is the one thing conditions cannot express yet; that is the planned CEL layer.
+In JSON Schema these become `if`/`then`/`else` blocks, which Ajv runs natively. Arithmetic between fields (`end - start < 30 days`) is the one thing conditions cannot express yet; that is the planned CEL layer (`ir.Expr("...")` exists in the IR and is refused by both executors until then).
+
+A condition can also be a Go predicate, by name. The gate says `ir.CustomCond("vip")`; a registry supplies the function. The predicate is Go-only, so the manifest lists it and the browser skips the gate.
+
+```go
+package main
+
+import (
+	"context"
+	"errors"
+	"log"
+	"strings"
+
+	"github.com/ubgo/validator/examples/guide/signup"
+	"github.com/ubgo/validator/interp"
+	"github.com/ubgo/validator/ir"
+	"github.com/ubgo/validator/vb"
+)
+
+// vipRegistry answers the schema's own rule names and adds the "vip"
+// predicate. Anything with a Func(name) method is a registry; generated
+// code accepts the same type.
+type vipRegistry struct{ base *vb.Schema[signup.Signup] }
+
+func (r vipRegistry) Func(name string) (vb.Func, bool) {
+	if name == "vip" {
+		return func(_ context.Context, v any) error {
+			if s, ok := v.(signup.Signup); ok && strings.HasSuffix(s.Email, "@vip.example.com") {
+				return nil
+			}
+			return errors.New("not vip")
+		}, true
+	}
+	return r.base.Func(name)
+}
+
+func main() {
+	gated := vb.Struct("Signup",
+		vb.F(signup.SignupFields.Email, vb.String().Email()),
+		vb.F(signup.SignupFields.Age, vb.Int[int]()),
+	).Gate(
+		// Non-VIPs must be 21 or older.
+		vb.When(ir.CustomCond("vip"), nil, []ir.TargetRule{vb.On(signup.SignupFields.Age, ir.Min(21))}),
+	).MustBuild()
+
+	// FromSchema would fail here: the schema's own registry does not know "vip".
+	v, err := interp.New(gated.IR(), interp.WithFuncs(vipRegistry{base: gated}))
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(v.Validate(context.Background(), &signup.Signup{Email: "a@example.com", Age: 18})) // $.age: must be at least 21
+}
+```
 
 ### 4.5 Variants: discriminated unions and unions
 
@@ -437,7 +494,13 @@ var PaymentSchema = vb.Struct("Payment",
 ).MustBuild()
 ```
 
-When the variants are whole objects, use `vb.OneOf[T]("kind").Case("online", vb.Object(...)).Case("offline", vb.Object(...))`. The emitter turns this into a discriminator-keyed `if`/`then`/`else` chain, never a raw `oneOf`, so error messages point at the variant that was selected instead of listing every variant's failures.
+When the variants are whole objects, use `vb.OneOf[T]("kind").Case("online", vb.Object(...)).Case("offline", vb.Object(...))`. The emitter turns this into a discriminator-keyed `if`/`then`/`else` chain, never a raw `oneOf`, so error messages point at the variant that was selected instead of listing every variant's failures. A tag that matches no case is an `unknown_variant` issue, unless you add `.Default(vb.Object(...))`, which then validates every unlisted tag:
+
+```go
+vb.F(ev, vb.OneOf[Event]("kind").
+	Case("online", vb.Object(vb.F(kind, vb.String().Const("online")), vb.F(url, vb.String().URL()))).
+	Default(vb.Object(vb.F(kind, vb.String()), vb.F(url, vb.String()).Optional())))
+```
 
 An untagged union on an `any` field tries variants in order and the first pass wins:
 
@@ -494,6 +557,7 @@ func main() {
 | default (`CoerceMarked`) | only fields marked `.Coerce()` |
 | `interp.Lax()` | every convertible field, except those marked `.NoCoerce()` |
 | `interp.Strict()` | same as the default; names the intent |
+| `interp.WithCoerce(mode)` | the same three as a value, for configuration-driven setups |
 
 Field markers beat the call option in both directions. RFC 3339 strings are always accepted for time fields on map input. Struct input is never coerced: a typed field already has its type.
 
@@ -546,6 +610,54 @@ func main() {
 
 Fail-fast is a property of the result you own, so several schemas can report into one list, and the first issue is the same one an accumulating run would have reported first.
 
+More on results, as a complete program:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/ubgo/validator/examples/guide/signup"
+	"github.com/ubgo/validator/interp"
+	"github.com/ubgo/validator/verr"
+)
+
+func main() {
+	v, err := interp.FromSchema(signup.Schema)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Validate a sub-document: paths start at the prefix you give.
+	errs := &verr.Errors{}
+	v.RunIntoAt(context.Background(), &signup.Signup{}, "$.body", errs)
+	fmt.Println(errs.Issues[0].Path) // $.body.email
+
+	// Group by path for per-field rendering.
+	for path, issues := range errs.ByPath() {
+		fmt.Println(path, len(issues), issues[0].Code)
+	}
+
+	// OrNil and Len are safe on a nil *verr.Errors, so a handler can hold one
+	// variable for "no issues" and "some issues".
+	var none *verr.Errors
+	fmt.Println(none.OrNil() == nil, none.Len()) // true 0
+
+	// Stopped reports whether a fail-fast list has taken its one issue.
+	first := &verr.Errors{FailFast: true}
+	v.RunInto(context.Background(), &signup.Signup{}, first)
+	fmt.Println(first.Stopped()) // true
+
+	// Render a message template yourself, from code and params.
+	fmt.Println(verr.Render("use at least {value} characters", map[string]any{"value": 8}))
+}
+```
+
+Structural codes an executor emits without a rule: `required`, `type`, `unknown_key`, `unknown_variant`, `no_union_match`, `group`, and `custom` for a custom or async rule that returned an error.
+
 ### 4.9 Custom and async rules
 
 Both are in the guide's `rules.go` above, on the email field:
@@ -583,7 +695,26 @@ curl -s -X POST localhost:8080/v/email_free -d '{"rule":"email_free","value":"ta
 {"ok":false,"issues":[{"code":"custom","path":"","message":"already registered","rule":"async","params":{"error":"already registered","ref":"email_free"}}]}
 ```
 
-The handler has a 64 KiB body cap, a per-IP token bucket and a `rulehttp.WithAuthorize` hook; custom rules are never served. The backend stays authoritative: the round-trip is UX, `Validate` on submit is the decision.
+`signup.Schema.Endpoints()` lists the async rules with their paths; a rule declared with an empty endpoint is served at `/v/<name>`. Custom rules are never served, so they cannot be enumerated over HTTP. The handler's options:
+
+```go
+h, err := rulehttp.FromSchema(signup.Schema,
+	rulehttp.WithMaxBody(256),                             // default 64 KiB
+	rulehttp.WithLimiter(rulehttp.NewTokenBucket(10, 20)), // default; rulehttp.NoLimit to disable
+	rulehttp.WithClientKey(func(r *http.Request) string {  // default: the peer IP, no proxy headers trusted
+		return r.Header.Get("X-Api-Key")
+	}),
+	rulehttp.WithAuthorize(func(r *http.Request) error {   // any error answers 403
+		if r.Header.Get("Authorization") != "Bearer secret" {
+			return errors.New("no token")
+		}
+		return nil
+	}),
+)
+h.Mount(mux)   // registers "POST <path>" for every endpoint; or mux.Handle("/v/", h)
+```
+
+Transport failures are not validation issues. They answer with a 4xx and `{"ok":false,"error":{"code":"...","message":"..."}}`, codes `bad_request`, `bad_value`, `unknown_rule`, `method_not_allowed`, `too_large`, `rate_limited`, `unauthorized`, `internal`. The TypeScript runtime treats them as "could not check", never as "valid". The backend stays authoritative: the round-trip is UX, `Validate` on submit is the decision.
 
 ### 4.10 Messages, codes and translations
 
@@ -633,7 +764,126 @@ func main() {
 }
 ```
 
+Checking a translation from Go, the same check `validatorctl catalog --check` runs:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/ubgo/validator/i18n"
+)
+
+func main() {
+	f, err := os.Open("de.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	de, err := i18n.Load(f) // refuses an empty catalog
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Every code the library can emit, and which of them de.json lacks.
+	fmt.Println(len(i18n.Codes()), "codes;", len(de.Missing()), "missing from de")
+
+	// Merged over the default, nothing is missing: English fills the gaps.
+	merged := i18n.Merge(i18n.Default(), de)
+	fmt.Println(len(merged.Missing())) // 0
+
+	// Write the merged catalog back out, e.g. to ship it to the frontend.
+	out, _ := merged.JSON()
+	_ = os.WriteFile("de.full.json", out, 0o644)
+}
+```
+
 The same catalog file is the TypeScript runtime's `catalog` option, so both sides render one wording.
+
+### 4.11 Unknown keys
+
+On map input, keys the schema does not declare are ignored by default. `.Extra(ir.ExtraForbid)` on the struct builder makes each one an `unknown_key` issue at its own path (`$.typo`); `ir.ExtraAllow` states explicitly that they are fine. Struct input has no unknown keys, because the decoder already dropped them; the policy is exported to JSON Schema as `additionalProperties`, so the browser enforces it too.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/ubgo/validator/interp"
+	"github.com/ubgo/validator/ir"
+	"github.com/ubgo/validator/vb"
+)
+
+type Tiny struct {
+	Name string `json:"name"`
+}
+
+var name = vb.NewField("Name", func(x Tiny) string { return x.Name }).JSON("name")
+
+// Strict rejects keys the schema does not declare.
+var Strict = vb.Struct("Tiny", vb.F(name, vb.String())).Extra(ir.ExtraForbid).MustBuild()
+
+func main() {
+	v, err := interp.FromSchema(Strict)
+	if err != nil {
+		log.Fatal(err)
+	}
+	errs := v.Run(context.Background(), map[string]any{"name": "a", "typo": 1})
+	fmt.Println(errs.Issues[0].Path, errs.Issues[0].Code) // $.typo unknown_key
+
+	// Struct input cannot carry an unknown key; the policy only bites on maps.
+	fmt.Println(v.Validate(context.Background(), &Tiny{Name: "a"})) // <nil>
+}
+```
+
+### 4.12 Hand-written or foreign IR
+
+The IR is JSON, so it can come from anywhere: a file, another language, a database. Decode it into `ir.Schema`, check it, run it. Names of custom and async rules must be resolved by a registry you pass in.
+
+```go
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"log"
+	"os"
+
+	"github.com/ubgo/validator/examples/guide/signup"
+	"github.com/ubgo/validator/interp"
+	"github.com/ubgo/validator/ir"
+)
+
+func main() {
+	raw, err := os.ReadFile("signup.ir.json") // written by signup-export, or by hand, or by another tool
+	if err != nil {
+		log.Fatal(err)
+	}
+	var doc ir.Schema
+	if err := json.Unmarshal(raw, &doc); err != nil { // unknown node or rule kinds fail here
+		log.Fatal(err)
+	}
+	if err := ir.Check(&doc); err != nil { // structure, required params, regexes, portability claims
+		log.Fatal(err)
+	}
+
+	// The document only names custom and async rules; a registry supplies the
+	// bodies. Here the vb schema that produced the file is the registry.
+	v, err := interp.New(&doc, interp.WithFuncs(signup.Schema)) // refuses unresolved names and CEL
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(v.Validate(context.Background(), map[string]any{"email": "ada@example.com"}))
+}
+```
+
+`validatorctl ir check file.json` runs the same check from the shell, and `validatorctl ir contract` (`jsonschema.Contract()` in Go) prints the JSON Schema the file must conform to. `schema.Getter("Email")` returns the accessor for a root field by Go name, for tools that map issues back to struct fields.
 
 ## 5. Exporting: JSON Schema, manifest, TypeScript
 
@@ -740,6 +990,45 @@ validatorctl ir check web/src/signup.ir.json     # structural check of an IR doc
 validatorctl ir contract                         # the JSON Schema of the IR format itself
 ```
 
+The Go API behind those commands, with the options the export program above did not use:
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/ubgo/validator/examples/guide/signup"
+	"github.com/ubgo/validator/jsonschema"
+)
+
+func main() {
+	// Draft-07 for classic Ajv and OpenAPI 3.0 consumers; Draft2020 is the default.
+	res, err := jsonschema.Emit(signup.Schema.IR(), jsonschema.WithDraft(jsonschema.Draft07), jsonschema.WithID("https://example.com/signup.json"))
+	if err != nil {
+		log.Fatal(err) // an IR that fails ir.Check is refused, never partially emitted
+	}
+
+	// Gate a build on portability, or report by class.
+	if !res.Manifest.Portable() {
+		for class, entries := range res.Manifest.ByClass() { // opaque, server, cel, lossy, wasm
+			fmt.Println(class, len(entries))
+		}
+	}
+
+	// Expand $refs for tools that cannot follow them (the --ts export does this).
+	inlined, _ := json.MarshalIndent(jsonschema.Inline(res.Schema), "", "  ")
+	_ = os.WriteFile("signup.inlined.schema.json", inlined, 0o644)
+
+	// The schema of the IR format itself, for validating hand-written documents.
+	contract, _ := json.MarshalIndent(jsonschema.Contract(), "", "  ")
+	_ = os.WriteFile("ir.contract.schema.json", contract, 0o644)
+}
+```
+
 Output is byte-deterministic, so generated files diff cleanly.
 
 ## 6. The frontend runtime
@@ -785,6 +1074,17 @@ t.procedure.input(signup)                                                       
 
 Issues have the same `code`, `path`, `rule` and `params` as Go, so one error-rendering component serves both the optimistic browser result and the authoritative server response.
 
+| Option | Purpose |
+|---|---|
+| `manifest` | the manifest emitted with the schema; without it every rule is assumed portable |
+| `onNonPortable` | called once per rule the browser cannot run; default warns on the console |
+| `serverRules` | turn async round-trips off (default on when the manifest has server entries) |
+| `baseURL`, `debounceMs`, `fetch` | where and how the round-trips go; `fetch` for tests and non-browser runtimes |
+| `catalog` | message catalog, the same JSON as the Go side |
+| `ajv` | extra Ajv options merged over the defaults |
+
+Also exported: `Infer<typeof signupSchema>` for the value type; `Result<T>`, `Success<T>`, `Failure` for the return shape; `localize(issues, catalog)`, `render(template, params)`, `toIssues(ajvErrors)`; and the path helpers `jsonPathToSegments`, `pointerToSegments`, `segmentsToJSONPath`, `valueAt(value, segments)` for mapping an issue to a form field.
+
 ```mermaid
 flowchart TD
     U["User types"] --> V["signup.validate(value)<br/>Ajv, sync"]
@@ -801,8 +1101,7 @@ flowchart TD
 The interpreter is fine for most services. When a validator is on a hot path, generate it:
 
 ```sh
-go run ./guide/cmd/signup-export -dir guide/signup                 # signup.ir.json next to the model
-validatorctl gen guide/signup --schema guide/signup/signup.ir.json  # writes guide/signup/validate.gen.go
+cd guide/signup && go generate    # fields, then signup-export, then: validatorctl gen . --schema signup.ir.json
 ```
 
 ```go
@@ -831,7 +1130,7 @@ func main() {
 }
 ```
 
-The third argument is the registry that resolves custom and async rules by name; your `vb.Schema` is one. Generated code and the interpreter are conformance-tested to produce identical issues, so you can switch between them without behavior change.
+The third argument is the registry that resolves custom and async rules by name; your `vb.Schema` is one, and any type with `Func(name) (vb.Func, bool)` works. A registry that also offers `TypedFunc(name) (any, bool)` returning the original typed function lets the generated code call it without boxing (your `vb.Schema` does). Generated code and the interpreter are conformance-tested to produce identical issues, so you can switch between them without behavior change. The parts a generator cannot type statically, a discriminated union on an `any` field or a union with collection variants, run the interpreter on that subtree at the same path, so the only thing `gen` refuses is CEL.
 
 | Path | ns/op | allocs/op |
 |---|---|---|
@@ -849,6 +1148,8 @@ validatorctl migrate ./models --type Signup --out signup.ir.json --builder schem
 ```
 
 The migration reads `validate:"..."` tags on the root struct and every struct it references, writes the IR, and writes `vb` builder source using the generated accessors so you can start editing rules as code. Every tag it cannot express is reported with a reason and an alternative, and the command exits 1 unless you pass `--allow-partial`, so a lossy migration is a decision you made, not something that happened.
+
+From Go instead of the shell: `tags.Migrate(tags.Options{Dir, Type})` returns the IR, the migration order and `Unsupported` entries; `tags.Builder(schema, types, tags.BuilderOptions{Package})` renders the `vb` source; `accessors.Generate(accessors.Options{Dir})` is the `fields` command.
 
 Honesty rules the migration follows: a field without `required` becomes `Optional`; `min`/`max`/`len` on strings and collections are lengths, on numbers bounds; `gt`/`lt` on lengths become inclusive by one; `oneof` becomes `Enum`; `eqfield` and friends on time fields become `After`/`Before`, on anything else they are reported (they need the CEL layer).
 

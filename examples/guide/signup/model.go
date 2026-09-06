@@ -5,7 +5,12 @@ package signup
 
 import "time"
 
+// Regenerate everything derived from this package, in order: the field
+// accessors, the IR document, then the reflection-free validator.
+//
 //go:generate validatorctl fields
+//go:generate go run ../cmd/signup-export -dir .
+//go:generate validatorctl gen . --schema signup.ir.json
 
 // Signup is the request body of POST /signup. Nothing validator-specific
 // lives on the struct; rules are in rules.go.

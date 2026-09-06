@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/signup.json",
+  "title": "Signup",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "password": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 72
+    },
+    "age": {
+      "type": "integer",
+      "minimum": 18,
+      "maximum": 120
+    },
+    "plan": {
+      "type": "string",
+      "enum": [
+        "free",
+        "pro",
+        "team"
+      ]
+    },
+    "website": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "maxItems": 5,
+      "uniqueItems": true
+    },
+    "starts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ends": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "company": {
+      "type": "string"
+    },
+    "vat_id": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}[0-9A-Z]{8,12}$"
+    }
+  },
+  "required": [
+    "email",
+    "password",
+    "age",
+    "plan",
+    "starts",
+    "ends"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "plan": {
+            "const": "team"
+          }
+        },
+        "required": [
+          "plan"
+        ]
+      },
+      "then": {
+        "required": [
+          "company"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "vat_id"
+        ]
+      },
+      "then": {
+        "required": [
+          "company"
+        ]
+      }
+    }
+  ]
+}
