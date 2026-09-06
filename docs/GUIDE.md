@@ -24,7 +24,7 @@ You write validation rules once, in Go, against your own structs. Those rules ar
 flowchart LR
     subgraph author["You write (Go)"]
         A1["Typed builder<br/>vb.Struct(...)"]
-        A2["validate:&quot;...&quot; tags<br/>(migration only)"]
+        A2["validate tags<br/>migration only"]
     end
     IR[("IR<br/>rule tree as data<br/>JSON, versioned")]
     A1 --> IR
@@ -44,7 +44,7 @@ flowchart LR
     IR -- "validatorctl ir export" --> M
     JS --> TS
     M --> TS
-    TS -- "POST /v/&lt;rule&gt;<br/>async rules" --> R["rulehttp<br/>Go handler"]
+    TS -- "POST /v/rule<br/>async rules" --> R["rulehttp<br/>Go handler"]
 ```
 
 The rule that governs everything: **rules are data, never closures**. The only opaque things you can register are `.Custom(fn)` (Go only) and `.Async(name, endpoint, fn)` (Go runs it, the browser calls it over HTTP), and both are marked non-portable in the IR so nothing about them is hidden.
@@ -430,7 +430,7 @@ Issues have the same `code`, `path`, `rule` and `params` as Go, so one error-ren
 ```mermaid
 flowchart TD
     U["User types"] --> V["signup.validate(value)<br/>Ajv, sync"]
-    V -->|"ok"| A["validateAsync<br/>debounced POST /v/&lt;rule&gt;"]
+    V -->|"ok"| A["validateAsync<br/>debounced POST /v/rule"]
     V -->|"issues"| E["render issues by code"]
     A -->|"ok"| S["submit"]
     A -->|"issues"| E
