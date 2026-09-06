@@ -86,7 +86,10 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 	if err == nil {
 		return ExitOK
 	}
-	if ee, ok := errors.AsType[*exitError](err); ok {
+	// errors.As rather than errors.AsType: the module floor is Go 1.24 and
+	// AsType arrived in 1.26.
+	var ee *exitError
+	if errors.As(err, &ee) {
 		if !ee.quiet {
 			_, _ = fmt.Fprintf(stderr, "error: %v\n", ee.err)
 		}

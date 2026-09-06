@@ -38,6 +38,8 @@ Across the Go validators we surveyed, one capability combination is held by nobo
 
 ## Install
 
+Requires Go 1.24 or later; CI builds every push on 1.24 and on the current release.
+
 ```sh
 go get github.com/ubgo/validator
 go install github.com/ubgo/validator/cli/cmd/validatorctl@latest

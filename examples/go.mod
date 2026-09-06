@@ -1,6 +1,6 @@
 module github.com/ubgo/validator/examples
 
-go 1.26.4
+go 1.24
 
 require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
