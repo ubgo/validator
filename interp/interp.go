@@ -376,6 +376,18 @@ func lastSegment(path string) string {
 	return path
 }
 
+// Measured negative result, do not retry without new evidence: the
+// per-field `path + "." + wire` below looks like the obvious thing to make
+// lazy, the way codegen/rt.Path does it for generated code. It was tried
+// (a shared jsonpath.Path threaded through node/object/union/oneOf/rules)
+// and measured WORSE — 184 → 728 B/op on the success path — because every
+// segment moved to the heap. Generated code is straight-line, so escape
+// analysis proves its Path values never outlive the frame; this walker is
+// recursive, dispatches on an interface, and stores the path in a *scope
+// that is itself heap-allocated, so the whole chain escapes. Closing this
+// gap needs the paths precomputed per static node position at New time,
+// not a lazily built chain.
+//
 // object validates a struct or map[string]any against an object node; the
 // caller has already checked the shape.
 func (r *run) object(path string, o *ir.ObjectNode, val reflect.Value) {

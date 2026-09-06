@@ -122,26 +122,26 @@ models.ValidateUserInto(ctx, &user, UserSchema, first)
 
 ### Measured against go-playground/validator
 
-The same struct and the same rules, written once as `validate:"..."` tags and once as a schema, on Apple M-series, Go 1.26. A test asserts the two rule sets accept the same value and fail the same fields, so neither side is doing less work. Source: `examples/compare_bench_test.go`, fixture `examples/benchmodel`.
+The same struct and the same rules, written once as `validate:"..."` tags and once as a schema, on Apple M-series, Go 1.26, reporting the fastest of five runs. A test asserts the two rule sets accept the same value and fail the same fields, so neither side is doing less work. Source: `examples/compare_bench_test.go`, fixture `examples/benchmodel`.
 
 Valid input, the success path:
 
 | | ns/op | B/op | allocs/op |
 |---|---|---|---|
-| ubgo generated | 372 | 0 | 0 |
-| ubgo interpreter | 1880 | 184 | 15 |
-| go-playground/validator | 1883 | 547 | 14 |
+| ubgo generated | 375 | 0 | 0 |
+| ubgo interpreter | 1901 | 184 | 15 |
+| go-playground/validator | 1911 | 547 | 14 |
 
 Invalid input, four fields failing:
 
 | | ns/op | B/op | allocs/op |
 |---|---|---|---|
-| ubgo generated, caller-owned result | 1281 | 1153 | 26 |
-| ubgo generated | 1459 | 1666 | 29 |
-| go-playground/validator | 1755 | 1432 | 34 |
-| ubgo interpreter | 3135 | 1746 | 38 |
+| ubgo generated, caller-owned result | 1374 | 1153 | 26 |
+| ubgo generated | 1517 | 1666 | 29 |
+| go-playground/validator | 1754 | 1432 | 34 |
+| ubgo interpreter | 3225 | 1746 | 38 |
 
-Read honestly: the generated executor is about five times faster than the incumbent on valid input and allocates nothing. The interpreter is at parity on valid input using a third of the memory, and is still roughly 1.8x slower when there are errors to report, because it builds every field's path string eagerly while the generated code builds paths lazily on the stack. If validation is on a hot path and inputs often fail, generate.
+Read honestly: the generated executor is about five times faster than the incumbent on valid input and allocates nothing. The interpreter is at parity on valid input using a third of the memory, and is still roughly 1.8x slower when there are errors to report, because reflection and issue construction cost more there. The lazy stack-allocated path that makes the generated code free was tried in the interpreter and measured worse, because its recursive walker defeats escape analysis; the note in `interp` records why. If validation is on a hot path and inputs often fail, generate.
 
 Reproduce with:
 
