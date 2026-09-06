@@ -40,7 +40,7 @@ jobs:
         run: |
           cd cli
           go build -trimpath -ldflags="-s -w" -o "../validatorctl-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ./cmd/validatorctl
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: validatorctl-*
 
