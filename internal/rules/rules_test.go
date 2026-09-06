@@ -238,3 +238,48 @@ func TestFastPathsAreSubsets(t *testing.T) {
 		t.Errorf("fast paths allocate %.1f", n)
 	}
 }
+
+// TestInValueMatchesIn pins the fast path to the reference: InValue must
+// answer exactly what In answers, for every combination of value kind and
+// candidate kind the two can meet. A fast path that disagrees with the
+// semantics it is optimizing is a correctness bug, not a speed-up.
+func TestInValueMatchesIn(t *testing.T) {
+	three, str, tru := 3, "3", true
+	values := []any{
+		nil, 3, int8(3), int64(3), uint(3), 3.0, 3.5, float32(2.5),
+		"3", "x", "", true, false, &three, &str, &tru,
+		[]int{1}, map[string]int{"a": 1}, struct{ A int }{1},
+	}
+	// Every candidate set worth trying: singletons, pairs, and the lot.
+	var sets [][]any
+	for _, v := range values {
+		sets = append(sets, []any{v})
+	}
+	sets = append(sets, values, nil, []any{}, []any{3, "3"}, []any{"x", 3.0}, []any{nil, true})
+
+	for _, v := range values {
+		rv := reflect.ValueOf(v)
+		if !rv.IsValid() {
+			continue // In(nil, ...) has no reflect.Value counterpart to pass
+		}
+		for _, set := range sets {
+			want := In(v, set)
+			got := InValue(rv, set)
+			if got != want {
+				t.Errorf("InValue(%#v, %#v) = %v, In = %v", v, set, got, want)
+			}
+		}
+	}
+	// The fast kinds must not allocate.
+	strVal, numVal, boolVal := reflect.ValueOf("b"), reflect.ValueOf(7), reflect.ValueOf(true)
+	enum := []any{"a", "b", "c"}
+	nums := []any{1, 7, 9}
+	bools := []any{false, true}
+	if n := testing.AllocsPerRun(200, func() {
+		InValue(strVal, enum)
+		InValue(numVal, nums)
+		InValue(boolVal, bools)
+	}); n != 0 {
+		t.Errorf("InValue allocates %.1f per call on the fast kinds", n)
+	}
+}

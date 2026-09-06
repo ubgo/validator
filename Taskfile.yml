@@ -128,13 +128,53 @@ tasks:
           GOOS={{splitList "/" .ITEM | first}} GOARCH={{splitList "/" .ITEM | last}} go vet ./...
           (cd cli && GOOS={{splitList "/" .ITEM | first}} GOARCH={{splitList "/" .ITEM | last}} go build ./...)
 
+  fuzz:
+    desc: 'Run every fuzz target briefly (FUZZTIME=30s to change); the untrusted-input surfaces: IR decode, interpreter map input, HTTP handler'
+    vars:
+      FUZZTIME: '{{.FUZZTIME | default "20s"}}'
+    cmds:
+      # One target per invocation: `go test -fuzz` accepts a single pattern.
+      # A crash writes its input to the package's testdata/fuzz, which is
+      # committed so the failure becomes a permanent regression test.
+      - go test -run xxx -fuzz 'FuzzDecodeSchema$' -fuzztime {{.FUZZTIME}} ./ir/
+      - go test -run xxx -fuzz 'FuzzDecodeType$' -fuzztime {{.FUZZTIME}} ./ir/
+      - go test -run xxx -fuzz 'FuzzValidateMap$' -fuzztime {{.FUZZTIME}} ./interp/
+      - go test -run xxx -fuzz 'FuzzCompileSchema$' -fuzztime {{.FUZZTIME}} ./interp/
+      - go test -run xxx -fuzz 'FuzzServeHTTP$' -fuzztime {{.FUZZTIME}} ./rulehttp/
+      - go test -run xxx -fuzz 'FuzzServeHTTPPaths$' -fuzztime {{.FUZZTIME}} ./rulehttp/
+
+  vuln:
+    desc: Scan every module for known vulnerabilities (govulncheck)
+    # Deliberately NOT part of `task ci`: a newly published CVE would turn
+    # the code gate red without a code change, which trains people to ignore
+    # it. It runs as its own CI job and on a schedule instead, so the signal
+    # stays loud and the gate stays deterministic.
+    cmds:
+      # Not "skip when missing" like the linters: a vulnerability scan that
+      # silently does not run is worse than none, because the green gate
+      # reads as "checked".
+      - |
+        bin=$(command -v govulncheck || echo "$(go env GOPATH)/bin/govulncheck")
+        if [ ! -x "$bin" ]; then
+          echo "installing govulncheck"
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          bin="$(go env GOPATH)/bin/govulncheck"
+        fi
+        "$bin" ./...
+        (cd cli && "$bin" ./...)
+        (cd examples && "$bin" ./...)
+
   ci:
-    desc: The full gate — library, cli, ts AND the proof module — format, vet, lint, race tests, ts typecheck+tests+build, external proofs
+    desc: The full gate — library, cli, ts AND the proof module — format, vet, lint, race tests, fuzz smoke, ts typecheck+tests+build, external proofs
     cmds:
       - task: fmt:check
       - task: vet
       - task: lint
       - task: test:race
+      # Short by design: the gate proves the targets still hold their
+      # invariants on every push; `task fuzz FUZZTIME=5m` is the deep run.
+      - task: fuzz
+        vars: { FUZZTIME: 10s }
       - task: cli:ci
       - task: ts:ci
       # After ts:ci on purpose: the round-trip proof runs the built ts/dist.

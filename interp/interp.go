@@ -380,14 +380,25 @@ func lastSegment(path string) string {
 // caller has already checked the shape.
 func (r *run) object(path string, o *ir.ObjectNode, val reflect.Value) {
 	sc := &scope{obj: o, val: val, path: path}
-	declared := make(map[string]struct{}, len(o.Fields))
+	// The set of declared names is only consulted by the unknown-key check
+	// below, which only applies to map input under ExtraForbid. Building it
+	// unconditionally cost one map allocation per object on every run,
+	// including the common struct-input case that can have no unknown keys.
+	checkExtra := o.Extra == ir.ExtraForbid && isStringMap(val)
+	var declared map[string]struct{}
+	if checkExtra {
+		declared = make(map[string]struct{}, len(o.Fields))
+	}
 	for i := range o.Fields {
 		if r.stopped {
 			return
 		}
 		f := &o.Fields[i]
-		declared[wireName(f)] = struct{}{}
-		fp := path + "." + wireName(f)
+		wire := wireName(f)
+		if checkExtra {
+			declared[wire] = struct{}{}
+		}
+		fp := path + "." + wire
 		child, present := fieldValue(val, *f)
 		if !present {
 			if def, ok := defaultOf(f); ok {
@@ -404,7 +415,7 @@ func (r *run) object(path string, o *ir.ObjectNode, val reflect.Value) {
 		child = r.transform(val, *f, child)
 		r.node(fp, f.Type, child, sc)
 	}
-	if o.Extra == ir.ExtraForbid && isStringMap(val) {
+	if checkExtra {
 		for _, key := range sortedMapKeys(val) {
 			if _, ok := declared[key.String()]; !ok {
 				r.structural(path+"."+key.String(), verr.CodeUnknownKey, "unknown key", map[string]any{"key": key.String()})

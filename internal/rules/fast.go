@@ -3,6 +3,7 @@ package rules
 import (
 	"net/mail"
 	"net/url"
+	"reflect"
 )
 
 // Allocation-free fast paths for the two format rules whose reference
@@ -167,4 +168,112 @@ func isURLByte(c byte) bool {
 		return true
 	}
 	return false
+}
+
+// InValue is [In] over a reflect.Value. The interpreter reaches the enum
+// and const rules holding a reflect.Value; calling In forces two boxing
+// allocations per check, one to turn the value into an `any` and one
+// inside Norm. This walks the candidates without boxing for the three
+// kinds that cover every practical enum (string, number, bool) and falls
+// back to In for anything else, so the answer is always In's answer.
+// TestInValueMatchesIn pins that equivalence.
+func InValue(rv reflect.Value, values []any) bool {
+	for rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
+		if rv.IsNil() {
+			return In(nil, values)
+		}
+		rv = rv.Elem()
+	}
+	switch rv.Kind() {
+	case reflect.String:
+		s := rv.String()
+		for _, c := range values {
+			if cs, isStr := c.(string); isStr {
+				if cs == s {
+					return true
+				}
+				continue
+			}
+			// A candidate of some other shape can still normalize to this
+			// string (a *string, say); those are rare, so pay for them only
+			// when they appear.
+			if Norm(c) == any(s) {
+				return true
+			}
+		}
+		return false
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		var f float64
+		switch rv.Kind() {
+		case reflect.Float32, reflect.Float64:
+			f = rv.Float()
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			f = float64(rv.Uint())
+		default:
+			f = float64(rv.Int())
+		}
+		for _, c := range values {
+			if cf, isNum := candidateFloat(c); isNum {
+				if cf == f {
+					return true
+				}
+				continue
+			}
+			if Norm(c) == any(f) {
+				return true
+			}
+		}
+		return false
+
+	case reflect.Bool:
+		b := rv.Bool()
+		for _, c := range values {
+			if cb, isBool := c.(bool); isBool {
+				if cb == b {
+					return true
+				}
+				continue
+			}
+			if Norm(c) == any(b) {
+				return true
+			}
+		}
+		return false
+	}
+	return In(rv.Interface(), values)
+}
+
+// candidateFloat reads a directly-typed numeric candidate. A type switch on
+// an interface value does not allocate, which is the point.
+func candidateFloat(c any) (float64, bool) {
+	switch x := c.(type) {
+	case float64:
+		return x, true
+	case float32:
+		return float64(x), true
+	case int:
+		return float64(x), true
+	case int8:
+		return float64(x), true
+	case int16:
+		return float64(x), true
+	case int32:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case uint:
+		return float64(x), true
+	case uint8:
+		return float64(x), true
+	case uint16:
+		return float64(x), true
+	case uint32:
+		return float64(x), true
+	case uint64:
+		return float64(x), true
+	}
+	return 0, false
 }

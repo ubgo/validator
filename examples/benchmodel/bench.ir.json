@@ -1,0 +1,199 @@
+{
+  "version": "ubgo.validator.ir/v1",
+  "root": {
+    "kind": "object",
+    "fields": [
+      {
+        "name": "Email",
+        "json": "email",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "email"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Name",
+        "json": "name",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "minLength",
+              "params": {
+                "value": 2
+              }
+            },
+            {
+              "kind": "maxLength",
+              "params": {
+                "value": 40
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Age",
+        "json": "age",
+        "type": {
+          "kind": "int",
+          "rules": [
+            {
+              "kind": "gte",
+              "params": {
+                "value": 18
+              }
+            },
+            {
+              "kind": "lte",
+              "params": {
+                "value": 120
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Plan",
+        "json": "plan",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "enum",
+              "params": {
+                "values": [
+                  "free",
+                  "pro",
+                  "team"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Website",
+        "json": "website",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "url"
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "UUID",
+        "json": "uuid",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "uuid"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Tags",
+        "json": "tags",
+        "type": {
+          "kind": "array",
+          "elem": {
+            "kind": "string",
+            "rules": [
+              {
+                "kind": "minLength",
+                "params": {
+                  "value": 1
+                }
+              }
+            ]
+          },
+          "rules": [
+            {
+              "kind": "maxItems",
+              "params": {
+                "value": 5
+              }
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Score",
+        "json": "score",
+        "type": {
+          "kind": "float",
+          "bits": 64,
+          "rules": [
+            {
+              "kind": "gte",
+              "params": {
+                "value": 0
+              }
+            },
+            {
+              "kind": "lte",
+              "params": {
+                "value": 100
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Country",
+        "json": "country",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "countryCode"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Created",
+        "json": "created",
+        "type": {
+          "kind": "time"
+        }
+      },
+      {
+        "name": "Nickname",
+        "json": "nickname",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "minLength",
+              "params": {
+                "value": 2
+              }
+            },
+            {
+              "kind": "maxLength",
+              "params": {
+                "value": 16
+              }
+            }
+          ]
+        },
+        "optional": true
+      }
+    ]
+  },
+  "meta": {
+    "title": "BenchUser"
+  }
+}

@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- Cross-library benchmark against go-playground/validator (`examples/compare_bench_test.go`, fixture `examples/benchmodel`), with a test asserting the two rule sets are equivalent so the comparison is fair. Numbers published in the README and the guide, including where the interpreter is still behind.
+- Fuzz targets for every untrusted-input surface, each pinning behavioral properties rather than only absence of panics: IR decode and round-trip stability (`ir`), interpreter map input including fail-fast/accumulate first-issue agreement and lax-never-rejects (`interp`), and the HTTP handler's response contract and endpoint isolation (`rulehttp`). `task fuzz`; `task ci` runs a short smoke of each.
+- `task vuln` (govulncheck across all three modules) as its own CI job plus a weekly schedule, kept out of the deterministic code gate on purpose.
+
 ### Changed
+- Interpreter allocations reduced on both paths: the declared-names map is built only when unknown keys are actually checked (map input under `ExtraForbid`), and enum/const checks go through `rules.InValue`, which compares a `reflect.Value` against the candidates without boxing. Success path 2265 → 1880 ns/op and 704 → 184 B/op, now at parity with go-playground on time and a third of its memory.
 - Module floor lowered to Go 1.24 (was pinned to the 1.26 toolchain); CI gate now runs on 1.24 and 1.26.
 
 ### Added

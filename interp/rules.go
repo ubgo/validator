@@ -68,9 +68,13 @@ func (r *run) apply(rule *ir.Rule, val reflect.Value, sc *scope) (bool, map[stri
 		return r.v.regex[pat].MatchString(val.String()), nil
 	case ir.RuleEnum:
 		values, _ := rule.Params[ir.ParamValues].([]any)
-		return rules.In(val.Interface(), values), nil
+		// InValue rather than In: the value is already a reflect.Value, and
+		// In's `any` parameter would box it on every check.
+		return rules.InValue(val, values), nil
 	case ir.RuleConst:
-		return rules.Norm(val.Interface()) == rules.Norm(rule.Params[ir.ParamValue]), nil
+		// Const is membership in a one-element set, so it takes the same
+		// non-boxing path.
+		return rules.InValue(val, []any{rule.Params[ir.ParamValue]}), nil
 	case ir.RuleEmail:
 		return rules.Email(val.String()), nil
 	case ir.RuleURL:

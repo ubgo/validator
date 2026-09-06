@@ -1132,13 +1132,40 @@ func main() {
 
 The third argument is the registry that resolves custom and async rules by name; your `vb.Schema` is one, and any type with `Func(name) (vb.Func, bool)` works. A registry that also offers `TypedFunc(name) (any, bool)` returning the original typed function lets the generated code call it without boxing (your `vb.Schema` does). Generated code and the interpreter are conformance-tested to produce identical issues, so you can switch between them without behavior change. The parts a generator cannot type statically, a discriminated union on an `any` field or a union with collection variants, run the interpreter on that subtree at the same path, so the only thing `gen` refuses is CEL.
 
+On the repository's own fixture, which is deliberately heavy (a union, a discriminated union, transforms, two custom rules, a gate predicate):
+
 | Path | ns/op | allocs/op |
 |---|---|---|
 | generated, `Into` | 490 | 0 |
 | generated | 510 | 1 |
 | interpreter | 9700 | 81 |
 
-Measured on the repository's example fixture (a union, a discriminated union, transforms, two custom rules, a gate predicate), arm64.
+### Against go-playground/validator
+
+Self-comparison is not evidence, so the same struct and rules are also written as `validate:"..."` tags and run through the incumbent. A test asserts both rule sets accept the same value and fail the same fields, so neither side is doing less work. Apple M-series, Go 1.26. Source: `examples/compare_bench_test.go`, fixture `examples/benchmodel`.
+
+Valid input, the success path:
+
+| | ns/op | B/op | allocs/op |
+|---|---|---|---|
+| ubgo generated | 372 | 0 | 0 |
+| ubgo interpreter | 1880 | 184 | 15 |
+| go-playground/validator | 1883 | 547 | 14 |
+
+Invalid input, four fields failing:
+
+| | ns/op | B/op | allocs/op |
+|---|---|---|---|
+| ubgo generated, `Into` | 1281 | 1153 | 26 |
+| ubgo generated | 1459 | 1666 | 29 |
+| go-playground/validator | 1755 | 1432 | 34 |
+| ubgo interpreter | 3135 | 1746 | 38 |
+
+Read honestly: the generated executor is about five times faster than the incumbent on valid input and allocates nothing. The interpreter is at parity on valid input while using a third of the memory, and is still roughly 1.8x slower when there are errors to report, because it builds each field's path string eagerly where the generated code builds paths lazily on the stack. So if validation is on a hot path and inputs frequently fail, generate.
+
+```sh
+go test -run xxx -bench BenchmarkCompare -benchmem ./examples/
+```
 
 ## 8. Migrating from go-playground/validator
 
