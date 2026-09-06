@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,6 +213,15 @@ func TestFastPathsAreSubsets(t *testing.T) {
 		if emailFast(s) && !refEmail(s) {
 			t.Errorf("emailFast accepts %q, net/mail does not", s)
 		}
+		// The mirror property: the reject path may only say no to what the
+		// reference also rejects. A wrong "no" here silently fails a valid
+		// address, which is worse than a slow one.
+		if emailReject(s) && refEmail(s) {
+			t.Errorf("emailReject rejects %q, net/mail accepts it", s)
+		}
+		if !strings.Contains(s, ":") && refURL(s) {
+			t.Errorf("URL's no-colon rejection is wrong for %q", s)
+		}
 		if urlFast(s) && !refURL(s) {
 			t.Errorf("urlFast accepts %q, net/url does not", s)
 		}
@@ -282,4 +292,28 @@ func TestInValueMatchesIn(t *testing.T) {
 	}); n != 0 {
 		t.Errorf("InValue allocates %.1f per call on the fast kinds", n)
 	}
+}
+
+// FuzzFastPaths is TestFastPathsAreSubsets driven by the fuzzer: for any
+// input at all, the public functions must agree with the reference
+// implementations they optimize. The accept and reject shortcuts are the
+// only place in this library where a performance change can silently alter
+// a validation answer, so they get a fuzz target of their own.
+func FuzzFastPaths(f *testing.F) {
+	for _, seed := range []string{
+		"ada@example.com", "not-an-email", "@x.io", "a@", "a@@b", `"q"@b.io`, "a@[1.2.3.4]",
+		"https://x.io/p", "x://y", "https://", "no-colon", "mailto:a@b", "https://x.io:80/p?q=1#f",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		wantEmail := func() bool { a, err := mail.ParseAddress(s); return err == nil && a.Address == s }()
+		if Email(s) != wantEmail {
+			t.Fatalf("Email(%q) = %v, net/mail says %v", s, Email(s), wantEmail)
+		}
+		wantURL := func() bool { u, err := url.Parse(s); return err == nil && u.Scheme != "" && u.Host != "" }()
+		if URL(s) != wantURL {
+			t.Fatalf("URL(%q) = %v, net/url says %v", s, URL(s), wantURL)
+		}
+	})
 }

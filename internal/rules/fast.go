@@ -4,6 +4,7 @@ import (
 	"net/mail"
 	"net/url"
 	"reflect"
+	"strings"
 )
 
 // Allocation-free fast paths for the two format rules whose reference
@@ -21,11 +22,29 @@ import (
 // Email reports whether s is a bare addr-spec (no display name), the
 // net/mail acceptance narrowed to the address itself.
 func Email(s string) bool {
+	if emailReject(s) {
+		return false
+	}
 	if emailFast(s) {
 		return true
 	}
 	addr, err := mail.ParseAddress(s)
 	return err == nil && addr.Address == s
+}
+
+// emailReject is the mirror of emailFast: where the accept path may only
+// say yes to what net/mail also accepts, this may only say no to what
+// net/mail also rejects. It exists because the accept path leaves every
+// INVALID address paying for a full net/mail parse (270 ns and 9
+// allocations, against 47 ns and none for a valid one), and a validator
+// meets invalid input by definition.
+//
+// Each test below is a property of the addr-spec grammar, not a heuristic:
+// an address must contain an "@", and neither the local part nor the
+// domain may be empty. Anything subtler is left to net/mail.
+func emailReject(s string) bool {
+	at := strings.IndexByte(s, '@')
+	return at < 0 || at == 0 || at == len(s)-1
 }
 
 // emailFast accepts dot-atom@dot-atom in ASCII: RFC 5322 atext on the
@@ -88,6 +107,12 @@ func isLDH(c byte) bool {
 
 // URL requires an absolute URL with scheme and host.
 func URL(s string) bool {
+	// Same asymmetry as Email: a string with no ":" cannot carry a scheme,
+	// so url.Parse would leave Scheme empty and the check would fail. Every
+	// other shape goes to url.Parse.
+	if !strings.Contains(s, ":") {
+		return false
+	}
 	if urlFast(s) {
 		return true
 	}

@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `task vuln` (govulncheck across all three modules) as its own CI job plus a weekly schedule, kept out of the deterministic code gate on purpose.
 
 ### Changed
+- Format checks gained sound fast rejections to match their fast acceptances: an address with no `@`, or an empty local part or domain, is refused without a `net/mail` parse (269 ns and 9 allocations down to 4 ns and none), and a string with no `:` is not a URL. Both are properties of the grammars, not heuristics, and `FuzzFastPaths` checks every input against `net/mail` and `net/url` directly. Failure path: interpreter 3225 to 2876 ns/op, generated 1374 to 999 ns/op, now about 1.7x faster than go-playground.
 - Interpreter allocations reduced on both paths: the declared-names map is built only when unknown keys are actually checked (map input under `ExtraForbid`), and enum/const checks go through `rules.InValue`, which compares a `reflect.Value` against the candidates without boxing. Success path 2265 → 1880 ns/op and 704 → 184 B/op, now at parity with go-playground on time and a third of its memory.
 - Module floor lowered to Go 1.24 (was pinned to the 1.26 toolchain); CI gate now runs on 1.24 and 1.26.
 

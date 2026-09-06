@@ -128,20 +128,20 @@ Valid input, the success path:
 
 | | ns/op | B/op | allocs/op |
 |---|---|---|---|
-| ubgo generated | 375 | 0 | 0 |
-| ubgo interpreter | 1901 | 184 | 15 |
-| go-playground/validator | 1911 | 547 | 14 |
+| ubgo generated | 385 | 0 | 0 |
+| ubgo interpreter | 1924 | 184 | 15 |
+| go-playground/validator | 1913 | 545 | 14 |
 
 Invalid input, four fields failing:
 
 | | ns/op | B/op | allocs/op |
 |---|---|---|---|
-| ubgo generated, caller-owned result | 1374 | 1153 | 26 |
-| ubgo generated | 1517 | 1666 | 29 |
-| go-playground/validator | 1754 | 1432 | 34 |
-| ubgo interpreter | 3225 | 1746 | 38 |
+| ubgo generated, caller-owned result | 999 | 1009 | 17 |
+| ubgo generated | 1178 | 1522 | 20 |
+| go-playground/validator | 1753 | 1432 | 34 |
+| ubgo interpreter | 2876 | 1602 | 29 |
 
-Read honestly: the generated executor is about five times faster than the incumbent on valid input and allocates nothing. The interpreter is at parity on valid input using a third of the memory, and is still roughly 1.8x slower when there are errors to report, because reflection and issue construction cost more there. The lazy stack-allocated path that makes the generated code free was tried in the interpreter and measured worse, because its recursive walker defeats escape analysis; the note in `interp` records why. If validation is on a hot path and inputs often fail, generate.
+Read honestly: the generated executor is about five times faster than the incumbent on valid input and allocates nothing, and about 1.7 times faster on invalid input. The interpreter is at parity on valid input while using a third of the memory, and remains roughly 1.6 times slower when there are errors to report. Two things explain that gap and both are deliberate. Every issue we produce carries a parameter map and a rendered message, where go-playground returns a lightweight error object and renders text only if asked. And our format checks are exact where theirs are regular expressions: `email` is decided by `net/mail`, so an address we cannot settle with the allocation-free shortcut costs a full parse. Note that the invalid fixture's email has no "@" and so takes the fast rejection; an address that is malformed in a subtler way still pays for the parse. If validation is on a hot path and inputs frequently fail, generate.
 
 Reproduce with:
 
