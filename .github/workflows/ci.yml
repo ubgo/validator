@@ -27,13 +27,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: |
-            go.sum
             cli/go.sum
             examples/go.sum
 
@@ -41,7 +40,7 @@ jobs:
         with:
           version: 11
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -78,10 +77,15 @@ jobs:
           - { goos: windows, goarch: amd64 }
           - { goos: freebsd, goarch: amd64 }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+          # The root module is stdlib-only and has no go.sum; point the
+          # cache at the modules that do.
+          cache-dependency-path: |
+            cli/go.sum
+            examples/go.sum
       - name: Build library, CLI and generated examples
         env:
           GOOS: ${{ matrix.goos }}
