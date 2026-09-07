@@ -141,7 +141,6 @@ func TestRefusals(t *testing.T) {
 		{"default type", vb.Struct("M", vb.F(fName, vb.String()).Default(5)).MustBuild().IR(), "default 5 cannot be assigned to string"},
 		{"oneof bad discriminator", &ir.Schema{Version: ir.Version, Meta: ir.SchemaMeta{Title: "M"}, Root: &ir.ObjectNode{Fields: []ir.FieldNode{{Name: "Kids", Type: &ir.ArrayNode{Elem: &ir.OneOfNode{Discriminator: "nope", Cases: map[string]ir.TypeNode{"a": &ir.ObjectNode{Fields: []ir.FieldNode{{Name: "nope", Type: &ir.StringNode{}}}}}}}}}}}, `discriminator "nope" is not a field of Kid`},
 		{"oneof non-string discriminator", &ir.Schema{Version: ir.Version, Meta: ir.SchemaMeta{Title: "M"}, Root: &ir.ObjectNode{Fields: []ir.FieldNode{{Name: "Kids", Type: &ir.ArrayNode{Elem: &ir.OneOfNode{Discriminator: "Age", Cases: map[string]ir.TypeNode{"a": &ir.ObjectNode{Fields: []ir.FieldNode{{Name: "Age", Type: &ir.IntNode{}}}}}}}}}}}, "must be a string field"},
-		{"cel", vb.Struct("M", vb.F(fName, vb.String())).Gate(vb.When(ir.Expr("x"), []ir.TargetRule{vb.On(fName, ir.MinLength(1))}, nil)).MustBuild().IR(), "condition expr is not supported"},
 		{"non-object def", &ir.Schema{Version: ir.Version, Root: &ir.ObjectNode{}, Defs: map[string]ir.TypeNode{"S": &ir.StringNode{}}, Meta: ir.SchemaMeta{Title: "M"}}, "def S is not an object"},
 		{"array on scalar", &ir.Schema{Version: ir.Version, Root: &ir.ObjectNode{Fields: []ir.FieldNode{{Name: "N", Type: &ir.ArrayNode{Elem: &ir.AnyNode{}}}}}, Meta: ir.SchemaMeta{Title: "M"}}, "array node on non-slice"},
 		{"map on scalar", &ir.Schema{Version: ir.Version, Root: &ir.ObjectNode{Fields: []ir.FieldNode{{Name: "N", Type: &ir.MapNode{Key: &ir.AnyNode{}, Val: &ir.AnyNode{}}}}}, Meta: ir.SchemaMeta{Title: "M"}}, "map node on non-map"},
@@ -318,4 +317,56 @@ func TestHelpers(t *testing.T) {
 		t.Error("wireOfGo fallback")
 	}
 	_ = context.Background()
+}
+
+// TestCELGatesAreDelegated pins the decision not to compile CEL into Go.
+// Two implementations of a language's semantics drift; one does not. A
+// gate whose condition is an expression is handed to the interpreter,
+// which is the only place CEL is evaluated.
+func TestCELGatesAreDelegated(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "m.go"),
+		[]byte("package m\n\ntype M struct {\n\tName string\n\tN int\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	type M struct {
+		Name string
+		N    int
+	}
+	fName := vb.NewField("Name", func(m M) string { return m.Name })
+	fN := vb.NewField("N", func(m M) int { return m.N })
+
+	schema := vb.Struct("M",
+		vb.F(fName, vb.String().MinLength(2)),
+		vb.F(fN, vb.Int[int]()),
+	).Gate(
+		// One gate codegen can compile, one it cannot.
+		vb.Requires(vb.Cmp(fN, ir.OpGt, 5), fName),
+		vb.When(ir.Expr("n > 1"), []ir.TargetRule{vb.On(fName, ir.MinLength(4))}, nil),
+	).MustBuild().IR()
+
+	res, err := Generate(Options{Schema: schema, Dir: dir})
+	if err != nil {
+		t.Fatalf("CEL gates should generate, not refuse: %v", err)
+	}
+	src := string(res.Source)
+	for _, want := range []string{
+		"CEL gates: delegated to the interpreter",
+		"rt.Interpret(",
+		"rt.MustSchema(",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("generated source lacks %q", want)
+		}
+	}
+	// The compilable gate is still compiled inline, not swept into the
+	// fallback along with the CEL one.
+	if !strings.Contains(src, "float64(v.N) > float64(int(5))") {
+		t.Error("the non-CEL gate should still be inline Go")
+	}
+	// The embedded subtree carries the gates and no field rules, so the
+	// fallback cannot re-report what the generated code already checked.
+	if strings.Contains(src, "minLength") && strings.Contains(src, `\"value\":2`) {
+		t.Error("field rules leaked into the delegated subtree")
+	}
 }

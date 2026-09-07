@@ -65,8 +65,10 @@ func (r *run) cond(sc *scope, k ir.Condition) bool {
 			return false
 		}
 		return r.v.funcs[k.Ref](r.ctx, sc.val.Interface()) == nil
+	case ir.CondExpr:
+		return r.evalExpr(sc, k)
 	}
-	// CondExpr is rejected at New; unknown kinds by ir.Check.
+	// Unknown kinds are rejected by ir.Check.
 	return false
 }
 

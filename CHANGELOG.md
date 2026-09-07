@@ -7,12 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- CEL expressions execute, through a new `github.com/ubgo/validator/cel` module. It is a separate module on purpose: the core has no third-party dependencies and cel-go is not small, so the engine is registered explicitly with `interp.WithExpr(cel.New())` and a schema containing an expression is still refused at startup without it. Expressions cover what the typed conditions cannot, arithmetic and aggregation across fields. Generated code delegates expression gates back to the interpreter rather than compiling CEL into Go, so there is one implementation of the language and not two; `rt.ExprRegistry` is how the engine reaches it. `cel/internal/example` proves both executors report identical issues.
 - Cross-field rules now run in the browser. JSON Schema cannot compare two properties, so `after`, `before` and gates keyed on a field-to-field comparison previously reached the frontend as a warning only. The manifest entry now carries `cond` (the condition tree in wire names), `then`/`else` (the branch fragments), and the `code`/`message` Go reports, and the TypeScript runtime executes them: same code, same wording, no round trip. An undecidable condition yields no issue, so the browser never reports what the server would not.
 - Cross-library benchmark against go-playground/validator (`examples/compare_bench_test.go`, fixture `examples/benchmodel`), with a test asserting the two rule sets are equivalent so the comparison is fair. Numbers published in the README and the guide, including where the interpreter is still behind.
 - Fuzz targets for every untrusted-input surface, each pinning behavioral properties rather than only absence of panics: IR decode and round-trip stability (`ir`), interpreter map input including fail-fast/accumulate first-issue agreement and lax-never-rejects (`interp`), and the HTTP handler's response contract and endpoint isolation (`rulehttp`). `task fuzz`; `task ci` runs a short smoke of each.
 - `task vuln` (govulncheck across all three modules) as its own CI job plus a weekly schedule, kept out of the deterministic code gate on purpose.
 
 ### Fixed
+- The CEL evaluation timeout did nothing. cel-go only consults the context when a program is built with `InterruptCheckFrequency`, so `WithTimeout` was a claim rather than a bound, and even an already-cancelled context returned a result. Now set, and `TestTimeoutIsEnforced` fails without it.
 - `task lint` swallowed real findings: `[ -x $bin ] && $bin run ... || echo skipping` treated a failing linter as a missing one, so a green gate hid three staticcheck findings, one of them a generator defect. Absence now skips; a finding fails.
 - The generator emitted `if !(!v.Field.IsZero())` for required time fields (SA4013) and an empty `} else {}` for optional fields with no rules. It now renders absence directly and omits an empty else.
 

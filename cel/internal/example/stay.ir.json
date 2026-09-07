@@ -1,0 +1,86 @@
+{
+  "version": "ubgo.validator.ir/v1",
+  "root": {
+    "kind": "object",
+    "fields": [
+      {
+        "name": "Start",
+        "json": "start",
+        "type": {
+          "kind": "time"
+        }
+      },
+      {
+        "name": "End",
+        "json": "end",
+        "type": {
+          "kind": "time"
+        }
+      },
+      {
+        "name": "Guests",
+        "json": "guests",
+        "type": {
+          "kind": "int",
+          "rules": [
+            {
+              "kind": "min",
+              "params": {
+                "value": 1
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Note",
+        "json": "note",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "minLength",
+              "params": {
+                "value": 3
+              }
+            }
+          ]
+        },
+        "optional": true
+      }
+    ],
+    "gated": [
+      {
+        "kind": "requires",
+        "cond": {
+          "kind": "expr",
+          "cel": "end - start \u003e duration('168h')"
+        },
+        "fields": [
+          "Note"
+        ]
+      },
+      {
+        "kind": "when",
+        "cond": {
+          "kind": "expr",
+          "cel": "guests \u003e 4"
+        },
+        "then": [
+          {
+            "field": "Note",
+            "rule": {
+              "kind": "minLength",
+              "params": {
+                "value": 10
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "title": "Stay"
+  }
+}

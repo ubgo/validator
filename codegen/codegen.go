@@ -387,10 +387,59 @@ func (g *gen) emitObjectBody(obj *ir.ObjectNode, pv string, fields map[string]fi
 		g.w("\t}")
 		g.stopCheck()
 	}
+	// Gates whose condition is a CEL expression go to the interpreter as a
+	// group, rather than being refused. Compiling CEL into Go would mean a
+	// second implementation of the language's semantics, and the two would
+	// eventually disagree; delegating keeps exactly one.
+	var deferred []ir.GatedRules
 	for _, gate := range obj.Gated {
+		if gate.Cond != nil && needsExpr(*gate.Cond) {
+			deferred = append(deferred, gate)
+			continue
+		}
 		g.emitGate(obj, gate, pv, fields, pathVar)
 		g.stopCheck()
 	}
+	if len(deferred) > 0 {
+		g.emitFallback(gatesOnly(obj, deferred), pv, pathVar, "CEL gates")
+		g.stopCheck()
+	}
+}
+
+// needsExpr reports whether a condition contains a CEL expression, which
+// only the interpreter (with an engine registered) can evaluate.
+func needsExpr(k ir.Condition) bool {
+	if k.Kind == ir.CondExpr {
+		return true
+	}
+	for _, sub := range k.Sub {
+		if needsExpr(sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// gatesOnly builds the node handed to the interpreter for deferred gates:
+// the same fields, so conditions and gated rules can still reach them, but
+// with every field's own validation removed so the fallback reports the
+// gates and nothing the generated code has already checked.
+//
+// Fields become Any and Optional. Their Go values are read by reflection,
+// which does not consult the node, so conditions and target rules behave
+// exactly as they would on the real node; only the duplicate field checks
+// disappear.
+func gatesOnly(obj *ir.ObjectNode, gates []ir.GatedRules) *ir.ObjectNode {
+	fields := make([]ir.FieldNode, len(obj.Fields))
+	for i, f := range obj.Fields {
+		fields[i] = ir.FieldNode{
+			Name:     f.Name,
+			JSONName: f.JSONName,
+			Type:     &ir.AnyNode{},
+			Optional: true,
+		}
+	}
+	return &ir.ObjectNode{Fields: fields, Gated: gates}
 }
 
 // emitTransforms applies the pre-phase string transforms in place. Only

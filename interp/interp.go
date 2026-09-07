@@ -96,6 +96,11 @@ type Validator struct {
 	lookup   Funcs
 	funcs    map[string]vb.Func
 	regex    map[string]*regexp.Regexp
+
+	// exprCompiler is the engine for CEL conditions, supplied by WithExpr;
+	// exprs holds one compiled program per distinct expression source.
+	exprCompiler ExprCompiler
+	exprs        map[string]ExprProgram
 }
 
 // New compiles a schema: checks its structure, compiles every pattern,
@@ -104,7 +109,7 @@ func New(s *ir.Schema, opts ...Option) (*Validator, error) {
 	if err := ir.Check(s); err != nil {
 		return nil, err
 	}
-	v := &Validator{schema: s, funcs: map[string]vb.Func{}, regex: map[string]*regexp.Regexp{}}
+	v := &Validator{schema: s, funcs: map[string]vb.Func{}, regex: map[string]*regexp.Regexp{}, exprs: map[string]ExprProgram{}}
 	for _, o := range opts {
 		o(v)
 	}
@@ -158,6 +163,10 @@ func (v *Validator) RunIntoAt(ctx context.Context, value any, path string, errs 
 type compiler struct {
 	v    *Validator
 	errs []error
+
+	// obj is the object whose subtree is being compiled, so an expression
+	// condition can be told which variables it may reference.
+	obj *ir.ObjectNode
 }
 
 func (c *compiler) errf(format string, args ...any) {
@@ -165,6 +174,13 @@ func (c *compiler) errf(format string, args ...any) {
 }
 
 func (c *compiler) node(n ir.TypeNode) {
+	// Track the enclosing object so an expression condition, whether on a
+	// gate or on a field, knows which variables it may name.
+	prev := c.obj
+	if o, ok := n.(*ir.ObjectNode); ok {
+		c.obj = o
+	}
+	defer func() { c.obj = prev }()
 	for _, r := range ir.Rules(n) {
 		c.rule(r)
 	}
@@ -218,13 +234,39 @@ func (c *compiler) rule(r ir.Rule) {
 func (c *compiler) cond(k ir.Condition) {
 	switch k.Kind {
 	case ir.CondExpr:
-		c.errf("CEL condition %q is not supported by the interpreter yet", k.CEL)
+		// Compile once, here, so a bad expression fails at startup rather
+		// than on the request that first reaches the gate.
+		if c.v.exprCompiler == nil {
+			c.errf("CEL condition %q needs an expression engine: pass interp.WithExpr (see github.com/ubgo/validator/cel)", k.CEL)
+			break
+		}
+		if _, done := c.v.exprs[k.CEL]; !done {
+			prog, err := c.v.exprCompiler.CompileExpr(k.CEL, objectVars(c.obj))
+			if err != nil {
+				c.errf("CEL condition %q: %v", k.CEL, err)
+			} else {
+				c.v.exprs[k.CEL] = prog
+			}
+		}
 	case ir.CondCustom:
 		c.resolve(k.Ref)
 	}
 	for _, sub := range k.Sub {
 		c.cond(sub)
 	}
+}
+
+// objectVars lists an object's fields by wire name, the variables an
+// expression may reference.
+func objectVars(o *ir.ObjectNode) []string {
+	if o == nil {
+		return nil
+	}
+	out := make([]string, 0, len(o.Fields))
+	for i := range o.Fields {
+		out = append(out, wireName(&o.Fields[i]))
+	}
+	return out
 }
 
 // resolve looks a function name up once and caches it, erroring when no

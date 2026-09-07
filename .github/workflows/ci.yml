@@ -70,8 +70,17 @@ jobs:
         working-directory: ts
         run: pnpm install --frozen-lockfile
 
+      # The minimum-Go job runs the modules consumers import. The examples
+      # module needs a newer toolchain than the floor, because the
+      # comparison benchmark pulls go-playground/validator; proof code may
+      # move ahead of the floor, the published modules may not.
       - name: Full gate
+        if: matrix.go != env.GO_MIN_VERSION
         run: task ci
+
+      - name: Gate at the minimum supported Go
+        if: matrix.go == env.GO_MIN_VERSION
+        run: task ci:min
 
   cross-compile:
     name: cross-compile (${{ matrix.goos }}/${{ matrix.goarch }})

@@ -167,6 +167,31 @@ tasks:
         (cd cli && "$bin" ./...)
         (cd examples && "$bin" ./...)
 
+  cel:test:
+    desc: Test the CEL module (separate module, cel-go lives there and nowhere else)
+    dir: cel
+    cmds:
+      - go build ./...
+      - go vet ./...
+      - go test -race ./...
+      - |
+        out=$(gofmt -l .)
+        if [ -n "$out" ]; then echo "gofmt needed on:"; echo "$out"; exit 1; fi
+
+  ci:min:
+    desc: >-
+      The gate for the modules consumers actually import (library, cli, cel),
+      at the minimum supported Go. The examples module is excluded on purpose:
+      it pulls go-playground/validator for the comparison benchmark, which
+      requires a newer Go than this project's floor. Proof code may need a
+      newer toolchain; the published floor must not.
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: test:race
+      - task: cli:ci
+      - task: cel:test
+
   ci:
     desc: The full gate — library, cli, ts AND the proof module — format, vet, lint, race tests, fuzz smoke, ts typecheck+tests+build, external proofs
     cmds:
@@ -179,6 +204,7 @@ tasks:
       - task: fuzz
         vars: { FUZZTIME: 10s }
       - task: cli:ci
+      - task: cel:test
       - task: ts:ci
       # After ts:ci on purpose: the round-trip proof runs the built ts/dist.
       - task: examples:ci

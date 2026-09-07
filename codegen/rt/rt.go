@@ -87,6 +87,18 @@ func Cond(ctx context.Context, reg Registry, name string, value any) bool {
 	return Call(ctx, reg, name, value) == nil
 }
 
+// ExprRegistry is the optional upgrade a registry offers when the schema
+// it serves contains CEL expressions. Generated code hands CEL gates to
+// the interpreter (one implementation of the language, not two), and the
+// interpreter needs the engine; this is how it gets there without the
+// generated package importing an expression library it may not use.
+//
+//	type Registry struct{ *vb.Schema[Order] }
+//	func (Registry) ExprCompiler() interp.ExprCompiler { return cel.New() }
+type ExprRegistry interface {
+	ExprCompiler() interp.ExprCompiler
+}
+
 // TypedRegistry is the optional upgrade a registry offers when it kept the
 // author's function with its real signature. *vb.Schema does.
 type TypedRegistry interface {
@@ -444,6 +456,11 @@ func Interpret(ctx context.Context, reg Registry, s *ir.Schema, value any, path 
 		var opts []interp.Option
 		if reg != nil {
 			opts = append(opts, interp.WithFuncs(reg))
+			if er, ok := reg.(ExprRegistry); ok {
+				if c := er.ExprCompiler(); c != nil {
+					opts = append(opts, interp.WithExpr(c))
+				}
+			}
 		}
 		compiled, err := interp.New(s, opts...)
 		if err != nil {
