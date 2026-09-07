@@ -26,7 +26,7 @@ func newIRCmd(a *app) *cobra.Command {
 		Use:   "ir",
 		Short: "Work with serialized IR documents",
 	}
-	cmd.AddCommand(newIRCheckCmd(a), newIRExportCmd(a), newIRContractCmd(a))
+	cmd.AddCommand(newIRCheckCmd(a), newIRExportCmd(a), newIRContractCmd(a), newIRErrorsCmd(a))
 	return cmd
 }
 
@@ -97,6 +97,33 @@ from the Go types, so it cannot drift from them.`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			doc := jsonschema.Contract()
+			if a.printer.JSON {
+				return a.printer.OK(doc)
+			}
+			out, err := json.MarshalIndent(doc, "", "  ")
+			if err != nil {
+				_ = a.printer.Fail(outfmt.CodeInvalid, err)
+				return failure(err)
+			}
+			_, _ = a.printer.Out.Write(append(out, '\n'))
+			return nil
+		},
+	}
+}
+
+func newIRErrorsCmd(a *app) *cobra.Command {
+	return &cobra.Command{
+		Use:   "errors",
+		Short: "Print the JSON Schema of the error body a failed validation returns",
+		Long: `Prints the JSON Schema of verr.Errors — the body every executor
+produces and every consumer parses. Reflected from the Go types, so a
+client typed from it cannot drift from what is actually sent.
+
+Use it to type a non-Go client, or to document the 422 response of an
+endpoint that returns validation errors.`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			doc := jsonschema.ErrorContract()
 			if a.printer.JSON {
 				return a.printer.OK(doc)
 			}

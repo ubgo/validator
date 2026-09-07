@@ -1,3 +1,4 @@
+import Ajv2020Import from "ajv/dist/2020.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -471,5 +472,42 @@ describe("the golden schema's cross-field rule runs in the browser", () => {
     const v = createValidator(schema2020, { manifest, onNonPortable: () => undefined, serverRules: false });
     const r = v.validate(validUser());
     expect(r.ok).toBe(true);
+  });
+});
+
+describe("the error contract describes what the runtime produces", () => {
+  // The TypeScript Issue interface is hand-written, and the Go struct it
+  // mirrors is not. This is the test that stops the two from drifting:
+  // issues produced HERE are validated against the schema reflected from
+  // the Go type, by the same Ajv the runtime already uses.
+  it("validates real browser issues against the Go-derived schema", () => {
+    const contract = JSON.parse(
+      readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures", "errors.contract.schema.json"), "utf8"),
+    );
+    // Ajv ships CommonJS, so the ESM default lands one level down. The
+    // runtime does the same unwrap in src/index.ts.
+    const Ajv2020 = ((Ajv2020Import as { default?: unknown }).default ??
+      Ajv2020Import) as new (opts?: Record<string, unknown>) => {
+      compile: (s: unknown) => ((v: unknown) => boolean) & { errors?: unknown };
+    };
+    const ajv = new Ajv2020({ strict: false });
+    const check = ajv.compile(contract);
+
+    const v = createValidator(schema2020, { manifest, onNonPortable: () => undefined, serverRules: false });
+    const bad = validUser();
+    bad["email"] = "nope";
+    bad["age"] = 1;
+    const r = v.validate(bad);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+
+    // The runtime adds `segments`, which Go does not send. The contract
+    // describes the WIRE shape, so compare what would be serialized.
+    const wire = { issues: r.issues.map(({ segments, ...rest }) => rest) };
+    expect(check(wire)).toBe(true);
+    if (!check(wire)) console.error(check.errors);
+
+    // And the negative, so the check is real.
+    expect(check({ issues: [{ path: "$", message: "no code" }] })).toBe(false);
   });
 });

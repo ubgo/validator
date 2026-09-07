@@ -455,3 +455,23 @@ func TestIRContract(t *testing.T) {
 		t.Fatalf("json: code=%d", code)
 	}
 }
+
+func TestIRErrors(t *testing.T) {
+	code, out, _ := run(t, "ir", "errors")
+	if code != ExitOK {
+		t.Fatalf("code = %d", code)
+	}
+	for _, want := range []string{
+		`"$id": "https://ubgo.dev/schemas/validator-errors-v1.json"`,
+		`"issues"`,
+		`"Issue"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q", want)
+		}
+	}
+	code, out, _ = run(t, "ir", "errors", "--json")
+	if code != ExitOK || !strings.Contains(out, `"ok":true`) {
+		t.Fatalf("json: code=%d", code)
+	}
+}

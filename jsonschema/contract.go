@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ubgo/validator/ir"
+	"github.com/ubgo/validator/verr"
 )
 
 // The IR contract: a JSON Schema OF the IR's own serialized form
@@ -184,5 +185,76 @@ func (c *contract) collectFields(t reflect.Type, props *Object, required *[]any)
 		if !strings.Contains(opts, "omitempty") && !strings.Contains(opts, "omitzero") {
 			*required = append(*required, name)
 		}
+	}
+}
+
+// ErrorContractID is the $id of the error-model document.
+const ErrorContractID = "https://ubgo.dev/schemas/validator-errors-v1.json"
+
+// ErrorContract builds the JSON Schema for [verr.Errors], the shape every
+// executor returns and every consumer parses.
+//
+// Why it exists: the TypeScript runtime declares its own `Issue`
+// interface, by hand, and a Go handler's 422 body is read by whatever the
+// caller wrote. Three descriptions of one shape, two of them
+// hand-maintained, is how a `params` field quietly becomes optional on one
+// side and required on the other. This one is reflected from the Go
+// struct, so it cannot drift from what is actually sent.
+//
+// It is a contract for the wire, not a validator you run: the issues a
+// validator produces are already well-formed. Use it to type a client, to
+// document a 422 response in OpenAPI, or to check a hand-rolled consumer.
+func ErrorContract() *Object {
+	c := &contract{defs: NewObject(), building: map[string]bool{}}
+	root := c.structOf(reflect.TypeFor[verr.Errors]())
+	doc := NewObject().
+		Set(kwSchema, string(contractDraft)).
+		Set(kwID, ErrorContractID).
+		Set(kwTitle, "ubgo/validator errors").
+		Set(kwDescription, "The body a failed validation returns: a list of issues, each locating one failure and naming it by a code a translator can key on.")
+	doc.Merge(root)
+
+	// The reflector cannot know these, because Go's type system does not
+	// carry them: a code is any string, but the structural ones are worth
+	// naming, and params is a free-form map by design.
+	if issue, ok := c.defs.Get("Issue"); ok {
+		annotateIssue(issue.(*Object))
+	}
+	doc.Set(contractDraft.defsKey(), c.defs)
+	return doc
+}
+
+// structuralCodes are the codes an executor emits without a rule. They are
+// listed in the schema as documentation, not as an enum: a rule code or a
+// caller's own code from Msg is equally valid, so constraining the field
+// would reject perfectly good issues.
+var structuralCodes = []any{
+	verr.CodeRequired, verr.CodeType, verr.CodeUnknownKey,
+	verr.CodeVariant, verr.CodeUnion, verr.CodeGroup, verr.CodeCustom,
+}
+
+// annotateIssue adds what reflection cannot see.
+func annotateIssue(issue *Object) {
+	props, ok := issue.Get(kwProperties)
+	if !ok {
+		return
+	}
+	p := props.(*Object)
+	if code, found := p.Get("code"); found {
+		code.(*Object).
+			Set(kwDescription, "Machine-readable identifier for the failure. Rule kinds have default codes (min_length, email); a rule's Meta.Code overrides; the structural values below are emitted without a rule. Not constrained to a closed set — a caller's own code is equally valid.").
+			Set(kwExamples, structuralCodes)
+	}
+	if path, found := p.Get("path"); found {
+		path.(*Object).Set(kwDescription, `JSONPath of the failing value, in wire names: "$.tags[0].name". "$" is the whole value.`)
+	}
+	if msg, found := p.Get("message"); found {
+		msg.(*Object).Set(kwDescription, "Rendered English message. A localizing consumer should ignore it and render from code plus params instead.")
+	}
+	if rule, found := p.Get("rule"); found {
+		rule.(*Object).Set(kwDescription, "The rule kind that failed. Absent for structural failures, which no rule produced.")
+	}
+	if params, found := p.Get("params"); found {
+		params.(*Object).Set(kwDescription, "Template variables for the message: the rule's operands, plus context such as the sibling field a cross-field rule names.")
 	}
 }

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ubgo.dev/schemas/validator-errors-v1.json",
+  "title": "ubgo/validator errors",
+  "description": "The body a failed validation returns: a list of issues, each locating one failure and naming it by a code a translator can key on.",
+  "type": "object",
+  "properties": {
+    "issues": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Issue"
+      }
+    }
+  },
+  "required": [
+    "issues"
+  ],
+  "$defs": {
+    "Issue": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Machine-readable identifier for the failure. Rule kinds have default codes (min_length, email); a rule's Meta.Code overrides; the structural values below are emitted without a rule. Not constrained to a closed set — a caller's own code is equally valid.",
+          "examples": [
+            "required",
+            "type",
+            "unknown_key",
+            "unknown_variant",
+            "no_union_match",
+            "group",
+            "custom"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "description": "JSONPath of the failing value, in wire names: \"$.tags[0].name\". \"$\" is the whole value."
+        },
+        "message": {
+          "type": "string",
+          "description": "Rendered English message. A localizing consumer should ignore it and render from code plus params instead."
+        },
+        "rule": {
+          "type": "string",
+          "description": "The rule kind that failed. Absent for structural failures, which no rule produced."
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "Template variables for the message: the rule's operands, plus context such as the sibling field a cross-field rule names."
+        }
+      },
+      "required": [
+        "code",
+        "path",
+        "message"
+      ]
+    }
+  }
+}

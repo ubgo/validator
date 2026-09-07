@@ -845,3 +845,54 @@ func TestObjectLevelRulesAreReported(t *testing.T) {
 		t.Errorf("an opaque rule leaked into the schema:\n%s", doc)
 	}
 }
+
+// TestErrorContract pins the schema of the error body. The value of this
+// document is that it is reflected rather than written, so the test's job
+// is to prove it matches the Go struct, not to restate the struct.
+func TestErrorContract(t *testing.T) {
+	doc := ErrorContract()
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, "errors.contract.schema.json", append(out, '\n'))
+
+	// The optionality must match the json tags exactly: rule and params
+	// carry omitempty, the other three do not. A client typed from a
+	// schema that got this wrong would insist on a field Go omits.
+	defs, _ := doc.Get("$defs")
+	issue, _ := defs.(*Object).Get("Issue")
+	req, _ := issue.(*Object).Get(kwRequired)
+	got := map[string]bool{}
+	for _, r := range req.([]any) {
+		got[r.(string)] = true
+	}
+	for _, name := range []string{"code", "path", "message"} {
+		if !got[name] {
+			t.Errorf("%q should be required", name)
+		}
+	}
+	for _, name := range []string{"rule", "params"} {
+		if got[name] {
+			t.Errorf("%q carries omitempty and must not be required", name)
+		}
+	}
+
+	// The structural codes are examples, not an enum: constraining the
+	// field would reject a rule code or a caller's own code from Msg.
+	props, _ := issue.(*Object).Get(kwProperties)
+	code, _ := props.(*Object).Get("code")
+	if _, constrained := code.(*Object).Get(kwEnum); constrained {
+		t.Error("code must not be an enum; any string is a valid code")
+	}
+	if ex, ok := code.(*Object).Get(kwExamples); !ok || len(ex.([]any)) != len(structuralCodes) {
+		t.Error("the structural codes should be listed as examples")
+	}
+
+	// Deterministic, like every other emitted document.
+	again, _ := json.Marshal(ErrorContract())
+	first, _ := json.Marshal(doc)
+	if string(again) != string(first) {
+		t.Error("ErrorContract is not deterministic")
+	}
+}

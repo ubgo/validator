@@ -24,9 +24,12 @@ tasks:
       - pnpm run build
 
   fixtures:
-    desc: Copy the Go-emitted TypeScript schema golden into test/fixtures (run after UPDATE_GOLDEN in jsonschema)
+    desc: Copy the Go-emitted goldens into test/fixtures (run after UPDATE_GOLDEN in jsonschema)
     cmds:
       - cp ../jsonschema/testdata/user.schema.ts test/fixtures/user.schema.ts
+      # The error contract is what stops the hand-written TS Issue
+      # interface from drifting from the Go struct it mirrors.
+      - cp ../jsonschema/testdata/errors.contract.schema.json test/fixtures/errors.contract.schema.json
 
   typecheck:
     desc: Type-check src and tests without emitting

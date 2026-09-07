@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
@@ -300,3 +302,101 @@ func TestIRDocumentsConformToTheContract(t *testing.T) {
 		}
 	}
 }
+
+// TestErrorBodiesMatchTheirContract is the proof that matters for the
+// error schema: real issues, from real validation failures, checked
+// against the document by an independent validator.
+//
+// A schema of the error model is only worth having if a client typed from
+// it can parse what the library actually sends. Reflection guarantees the
+// shape matches the struct; this guarantees the struct matches reality.
+func TestErrorBodiesMatchTheirContract(t *testing.T) {
+	contractDoc, err := json.Marshal(vjs.ErrorContract())
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract := compile(t, contractDoc, vjs.ErrorContractID)
+
+	v, err := interp.FromSchema(bookingSchemaForErrors())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	// Failures chosen to produce every SHAPE of issue: a rule with params,
+	// a structural one with none, a cross-field one naming a sibling, and
+	// an object rule reported at the root.
+	inputs := []any{
+		map[string]any{}, // required, no params
+		map[string]any{"email": "nope", "guests": 99},          // rule codes with params
+		map[string]any{"email": "a@b.io", "guests": "not-int"}, // a type issue
+		map[string]any{"email": "a@b.io", "guests": 1, "check_in": "2026-03-10T00:00:00Z", "check_out": "2026-03-01T00:00:00Z"},
+	}
+	var seen int
+	for i, in := range inputs {
+		errs := v.Run(ctx, in)
+		if errs.Len() == 0 {
+			continue
+		}
+		seen += errs.Len()
+		body, err := json.Marshal(errs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decoded any
+		if err := json.Unmarshal(body, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if err := contract.Validate(decoded); err != nil {
+			t.Errorf("input %d: the error body does not match its own contract: %v\n%s", i, err, body)
+		}
+	}
+	if seen < 4 {
+		t.Fatalf("only %d issues produced; the contract was barely exercised", seen)
+	}
+
+	// And the negative: a body missing a required field must be rejected,
+	// or the contract is not constraining anything.
+	for name, bad := range map[string]string{
+		"issue without a code": `{"issues":[{"path":"$","message":"x"}]}`,
+		"issue without a path": `{"issues":[{"code":"x","message":"x"}]}`,
+		"issues not an array":  `{"issues":{"code":"x"}}`,
+		"code of wrong type":   `{"issues":[{"code":1,"path":"$","message":"x"}]}`,
+	} {
+		var d any
+		_ = json.Unmarshal([]byte(bad), &d)
+		if err := contract.Validate(d); err == nil {
+			t.Errorf("%s: the contract accepted a malformed body", name)
+		}
+	}
+}
+
+// bookingSchemaForErrors is a small schema whose failures span every issue
+// shape the error contract must describe.
+func bookingSchemaForErrors() *vb.Schema[errBooking] {
+	return vb.Struct("ErrBooking",
+		vb.F(ebEmail, vb.String().Email()),
+		vb.F(ebGuests, vb.Int[int]().Min(1).Max(4)),
+		vb.F(ebIn, vb.Time()).Optional(),
+		vb.F(ebOut, vb.Time().With(vb.After(ebIn))).Optional(),
+	).Custom("consistent", func(_ context.Context, b errBooking) error {
+		if b.Guests > 2 && b.Email == "" {
+			return errors.New("a large party needs a contact address")
+		}
+		return nil
+	}).MustBuild()
+}
+
+type errBooking struct {
+	Email    string    `json:"email"`
+	Guests   int       `json:"guests"`
+	CheckIn  time.Time `json:"check_in"`
+	CheckOut time.Time `json:"check_out"`
+}
+
+var (
+	ebEmail  = vb.NewField("Email", func(b errBooking) string { return b.Email }).JSON("email")
+	ebGuests = vb.NewField("Guests", func(b errBooking) int { return b.Guests }).JSON("guests")
+	ebIn     = vb.NewField("CheckIn", func(b errBooking) time.Time { return b.CheckIn }).JSON("check_in")
+	ebOut    = vb.NewField("CheckOut", func(b errBooking) time.Time { return b.CheckOut }).JSON("check_out")
+)
