@@ -9,7 +9,7 @@ The files this guide shows live in `examples/guide/` and are compiled by the bui
 3. [The workflow, end to end](#3-the-workflow-end-to-end)
 4. [Authoring rules: every feature](#4-authoring-rules-every-feature) (types, fields, nesting, gates, variants, map input, presence, results, custom and async, messages, unknown keys, foreign IR, expressions)
 5. [Exporting: JSON Schema, manifest, TypeScript](#5-exporting-json-schema-manifest-typescript)
-6. [The frontend runtime](#6-the-frontend-runtime)
+6. [The frontend runtime](#6-the-frontend-runtime) (and 6.1: how the pieces fit, with diagrams)
 7. [Production: the generated executor](#7-production-the-generated-executor)
 8. [Migrating from go-playground/validator](#8-migrating-from-go-playgroundvalidator)
 9. [CLI reference](#9-cli-reference)
@@ -1195,6 +1195,76 @@ flowchart TD
     S --> G["Go: ValidateSignup<br/>authoritative"]
     G -->|"422 + verr.Errors"| E
 ```
+
+### 6.1 How the pieces fit
+
+This is the part that trips people up, so here it is three ways.
+
+**What each artifact is.** Your rules exist once, in Go. Everything else is derived from them.
+
+```mermaid
+flowchart TD
+    R["rules.go<br/>your rules, written once"]
+    IR["signup.ir.json<br/>the rules as data, complete<br/>knows about Go functions too"]
+    JS["signup.schema.ts<br/>JSON Schema<br/>only what the browser can express"]
+    MAN["the manifest<br/>the list of what did NOT fit<br/>custom fns, async, transforms"]
+    PKG["@ubgo/validator<br/>the npm package"]
+    AJV["Ajv, inside it<br/>reads the schema"]
+    COND["conditions.ts, inside it<br/>runs cross-field rules"]
+
+    R --> IR
+    IR -->|validatorctl ir export| JS
+    IR -->|validatorctl ir export| MAN
+    JS --> PKG
+    MAN --> PKG
+    PKG --> AJV
+    PKG --> COND
+```
+
+The manifest exists because the middle step loses things. A Go function cannot be written in JSON Schema, so it is listed instead of dropped silently.
+
+**What happens on one call.** A request arrives at Hono, which has never heard of this library.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant H as Hono
+    participant S as ~standard.validate
+    participant V as our validate()
+    participant A as Ajv compiled fn
+    participant J as your JSON rules
+
+    H->>S: validate(value)
+    Note over H,S: Hono knows only this one method name
+    S->>V: forwards, unchanged
+    V->>A: compiled(value)
+    A->>J: applies type string, format email, minimum 1
+    A-->>V: raw Ajv errors
+    V->>V: also run cross-field rules from the manifest
+    V-->>S: our shape: ok plus issues
+    S-->>H: spec shape: value, or issues
+```
+
+Only the last hop is translation. `~standard.validate` forwards to our real `validate` and reshapes the answer; everything below it runs on your JSON.
+
+**Where Zod sits.** It is a sibling, not a step. Nothing of ours passes through it.
+
+```mermaid
+flowchart LR
+    subgraph yours["If your rules live in Go"]
+        G["rules.go"] --> F["generated schema file"] --> P["@ubgo/validator"]
+    end
+    subgraph theirs["If your rules live in TypeScript"]
+        Z["hand-written Zod schema"]
+    end
+    P --> STD["the ~standard socket"]
+    Z --> STD
+    STD --> T["Hono, tRPC, TanStack Form<br/>they accept either"]
+```
+
+Both produce an object carrying a `~standard.validate` function. The tools call that one method, so either fits. You pick one per endpoint; they are alternatives, never combined. If Zod is not in your project you can ignore it entirely.
+
+**The one-paragraph version.** Your rules live in Go. Exporting turns them into a data file plus a list of what could not be exported. The npm package reads that data file, using Ajv for the standard parts and its own small evaluator for the cross-field parts. It exposes a `~standard.validate` method, which is the name every modern TypeScript form and RPC library looks for, so those tools take it exactly where they would have taken a Zod schema.
 
 ## 7. Production: the generated executor
 
