@@ -38,6 +38,17 @@ export interface ManifestEntry {
   readonly endpoint?: string;
   /** One-line human explanation. */
   readonly reason: string;
+  /**
+   * The executable form of an element JSON Schema could not express: the
+   * condition tree in wire names, the branch fragments, and the code and
+   * message Go reports. See `conditions.ts`; absent when the element can
+   * only run on the server.
+   */
+  readonly cond?: unknown;
+  readonly then?: Readonly<Record<string, unknown>>;
+  readonly else?: Readonly<Record<string, unknown>>;
+  readonly code?: string;
+  readonly message?: string;
 }
 
 /** The per-schema manifest. Mirrors Go's `Manifest`. */

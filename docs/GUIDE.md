@@ -1213,7 +1213,8 @@ Every command supports `--json` for a machine-readable envelope and exits non-ze
 | Formats, lengths, bounds, enums, patterns, nesting, arrays, maps, conditions, gates, discriminated unions | runs | runs (JSON Schema) | nothing to report |
 | `.Custom(fn)` | runs | warns once, server enforces | manifest `opaque` |
 | `.Async(name, endpoint, fn)` | runs | debounced round-trip | manifest `server` |
-| `After` / `Before` between fields | runs | server enforces | manifest `cel` (the class reserved for the planned expression layer) |
+| `After` / `Before` between fields | runs | **runs**, from the condition carried in the manifest | manifest `cel`, carrying `cond` |
+| Gates keyed on a field-to-field comparison | runs | **runs**, condition here plus branch schema in Ajv | manifest `cel`, carrying `cond` and `then`/`else` |
 | `Trim` / `Lower` / `Upper` / `NormalizeEmail` | runs, writes back | not applied | manifest `lossy` |
 | `.Coerce()` | runs on map input | Ajv `coerceTypes` for the whole schema | manifest `lossy` |
 | `.NoCoerce()` | pins the field | cannot exempt one property | manifest `lossy` |
@@ -1221,6 +1222,16 @@ Every command supports `--json` for a machine-readable envelope and exits non-ze
 | Regex with lookahead, named groups, inline flags | refused at `MustBuild` | n/a | build error |
 
 The design promise is that this table is exhaustive by construction: the emitter has no code path that drops a rule without adding a manifest entry.
+
+### Cross-field rules in the browser
+
+JSON Schema cannot compare two properties, so `end` being after `start` has no schema form. That used to mean the browser could only warn, and the user learned about the problem on submit. It no longer does. Conditions are data, so the emitter carries them: an entry that the schema could not express now also carries `cond`, the condition tree with wire names, and for a gate the `then` and `else` fragments its branches would have produced.
+
+The TypeScript runtime evaluates the condition itself and hands the fragments to Ajv, so there is one implementation of what `minLength` means on that side. It reports the same code and the same message text as Go, because the emitter puts both in the entry.
+
+One rule governs it: a condition the runtime cannot decide produces no issue. If an operand is missing, or two values have no ordering it knows, it stays silent and leaves the answer to the server. Reporting a violation the server would not report is the one failure that makes browser validation worse than none.
+
+This covers `after`, `before`, and any gate whose condition is built from comparisons. A gate keyed on a Go predicate or a CEL expression still cannot be evaluated from data alone, so those entries carry no condition and are still warned about and enforced server-side.
 
 ## 11. FAQ
 

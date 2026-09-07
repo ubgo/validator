@@ -121,7 +121,20 @@ func (e *emitter) liftedRule(path string, o *ir.ObjectNode, fieldPath, wire stri
 	condSchema, ok := e.cond(o, *r.Cond)
 	if !ok {
 		class, reason := condClass(*r.Cond)
-		e.manifest.Add(Entry{Path: fieldPath, Kind: KindCondition, Name: string(r.Cond.Kind), Class: class, Ref: r.Cond.Ref, Reason: reason})
+		entry := Entry{Path: fieldPath, Kind: KindCondition, Name: string(r.Cond.Kind), Class: class, Ref: r.Cond.Ref, Reason: reason}
+		// A condition built only from comparisons is executable by a
+		// runtime even though the schema cannot state it; one that reaches
+		// into Go or CEL is not.
+		if executableCond(*r.Cond) {
+			c := wireCond(o, *r.Cond)
+			entry.Cond = &c
+			prop := NewObject()
+			e.rule(fieldPath, prop, r)
+			if prop.Len() > 0 {
+				entry.Then = objectFragment(NewObject().Set(kwProperties, NewObject().Set(wire, withType(prop, fieldTypeByWire(o, wire)))))
+			}
+		}
+		e.manifest.Add(entry)
 		return nil
 	}
 	prop := NewObject()
@@ -141,7 +154,12 @@ func (e *emitter) gate(path string, o *ir.ObjectNode, g ir.GatedRules) *Object {
 		condSchema, ok := e.cond(o, *g.Cond)
 		if !ok {
 			class, reason := condClass(*g.Cond)
-			e.manifest.Add(Entry{Path: path, Kind: KindGate, Name: string(g.Kind), Class: class, Ref: g.Cond.Ref, Reason: reason})
+			entry := Entry{Path: path, Kind: KindGate, Name: string(g.Kind), Class: class, Ref: g.Cond.Ref, Reason: reason}
+			if executableCond(*g.Cond) {
+				c := wireCond(o, *g.Cond)
+				entry.Cond, entry.Then, entry.Else = &c, e.targetsSchema(path, o, g.Then), e.targetsSchema(path, o, g.Else)
+			}
+			e.manifest.Add(entry)
 			return nil
 		}
 		clause := NewObject().Set(kwIf, condSchema)
@@ -159,7 +177,13 @@ func (e *emitter) gate(path string, o *ir.ObjectNode, g ir.GatedRules) *Object {
 		condSchema, ok := e.cond(o, *g.Cond)
 		if !ok {
 			class, reason := condClass(*g.Cond)
-			e.manifest.Add(Entry{Path: path, Kind: KindGate, Name: string(g.Kind), Class: class, Ref: g.Cond.Ref, Reason: reason})
+			entry := Entry{Path: path, Kind: KindGate, Name: string(g.Kind), Class: class, Ref: g.Cond.Ref, Reason: reason}
+			if executableCond(*g.Cond) {
+				c := wireCond(o, *g.Cond)
+				entry.Cond = &c
+				entry.Then = objectFragment(NewObject().Set(kwRequired, wires(o, g.Fields)))
+			}
+			e.manifest.Add(entry)
 			return nil
 		}
 		return NewObject().Set(kwIf, condSchema).Set(kwThen, NewObject().Set(kwRequired, wires(o, g.Fields)))

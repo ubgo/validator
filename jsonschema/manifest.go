@@ -61,6 +61,34 @@ type Entry struct {
 
 	// Reason is a one-line human explanation.
 	Reason string `json:"reason"`
+
+	// Cond is the executable form of an element JSON Schema could not
+	// express, with wire names so a JSON-only consumer can resolve them.
+	// Present for cross-field rules and for gates keyed on a condition the
+	// schema cannot state.
+	//
+	// Two shapes, distinguished by whether Then/Else are set:
+	//   - Cond alone: the condition must hold, and an issue is reported
+	//     against Path when it does not. This is how after/before arrive.
+	//   - Cond with Then and/or Else: a gate. Evaluate Cond, then validate
+	//     the value against the matching fragment.
+	//
+	// nil when the element cannot be executed anywhere but the server (a
+	// custom predicate, or CEL without the CEL module).
+	Cond *ir.Condition `json:"cond,omitempty"`
+
+	// Then and Else are the JSON Schema fragments a gate's branches would
+	// have produced, for a runtime to validate with its own validator.
+	Then *Object `json:"then,omitempty"`
+	Else *Object `json:"else,omitempty"`
+
+	// Code and Message are what the Go executors report when Cond alone is
+	// the rule and it does not hold. Carried so the browser produces the
+	// identical issue rather than an approximation of it — one wording,
+	// one code, both sides. Empty for gates, whose branch issues come from
+	// the schema fragments.
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 // Manifest is the per-schema report of non-portable elements. Consumers

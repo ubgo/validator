@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ubgo/validator/ir"
 	"github.com/ubgo/validator/vb"
@@ -648,4 +649,153 @@ func TestStrictTransformManifest(t *testing.T) {
 			t.Error("strict produced a coerce entry")
 		}
 	}
+}
+
+// TestPortableTail covers the executable form carried for elements JSON
+// Schema cannot express: the condition in wire names, plus the fragments
+// its branches would have produced. Without it the frontend can only warn
+// about a cross-field rule; with it the frontend can enforce one.
+func TestPortableTail(t *testing.T) {
+	type Ev struct {
+		Start, End time.Time
+		Kind, Note string
+	}
+	start := vb.NewField("Start", func(e Ev) time.Time { return e.Start }).JSON("start")
+	end := vb.NewField("End", func(e Ev) time.Time { return e.End }).JSON("end")
+	kind := vb.NewField("Kind", func(e Ev) string { return e.Kind }).JSON("kind")
+	note := vb.NewField("Note", func(e Ev) string { return e.Note }).JSON("note")
+
+	find := func(m Manifest, k Kind, name string) *Entry {
+		for i := range m.Entries {
+			if m.Entries[i].Kind == k && m.Entries[i].Name == name {
+				return &m.Entries[i]
+			}
+		}
+		return nil
+	}
+
+	t.Run("after carries the comparison in wire names", func(t *testing.T) {
+		s := vb.Struct("Ev",
+			vb.F(start, vb.Time()),
+			vb.F(end, vb.Time().With(vb.After(start))),
+		).MustBuild()
+		res, err := Emit(s.IR())
+		if err != nil {
+			t.Fatal(err)
+		}
+		e := find(res.Manifest, KindRule, "after")
+		if e == nil || e.Cond == nil {
+			t.Fatalf("no executable after entry: %+v", res.Manifest.Entries)
+		}
+		if e.Cond.Kind != ir.CondFieldCmp || e.Cond.Field != "end" || e.Cond.FieldB != "start" || e.Cond.Op != string(ir.OpGt) {
+			t.Errorf("cond = %+v, want end gt start in wire names", *e.Cond)
+		}
+		if e.Then != nil || e.Else != nil {
+			t.Error("a cross-field rule gates nothing; Then/Else must be empty")
+		}
+	})
+
+	t.Run("before inverts the operator", func(t *testing.T) {
+		s := vb.Struct("Ev",
+			vb.F(start, vb.Time().With(vb.Before(end))),
+			vb.F(end, vb.Time()),
+		).MustBuild()
+		res, _ := Emit(s.IR())
+		e := find(res.Manifest, KindRule, "before")
+		if e == nil || e.Cond == nil || e.Cond.Op != string(ir.OpLt) {
+			t.Fatalf("before entry = %+v", e)
+		}
+	})
+
+	t.Run("when gate carries condition and both branches", func(t *testing.T) {
+		s := vb.Struct("Ev",
+			vb.F(start, vb.Time()),
+			vb.F(end, vb.Time()),
+			vb.F(kind, vb.String()).Optional(),
+			vb.F(note, vb.String()).Optional(),
+		).Gate(
+			vb.When(vb.FieldCmp(end, ir.OpGt, start),
+				[]ir.TargetRule{vb.On(kind, ir.MinLength(2))},
+				[]ir.TargetRule{vb.On(note, ir.MinLength(3))}),
+		).MustBuild()
+		res, _ := Emit(s.IR())
+		e := find(res.Manifest, KindGate, "when")
+		if e == nil || e.Cond == nil {
+			t.Fatalf("gate not executable: %+v", res.Manifest.Entries)
+		}
+		if e.Cond.Field != "end" || e.Cond.FieldB != "start" {
+			t.Errorf("cond not in wire names: %+v", *e.Cond)
+		}
+		if e.Then == nil || e.Else == nil {
+			t.Fatalf("both branches must be carried: then=%v else=%v", e.Then, e.Else)
+		}
+		then, _ := json.Marshal(e.Then)
+		els, _ := json.Marshal(e.Else)
+		if !strings.Contains(string(then), `"minLength":2`) || !strings.Contains(string(then), `"kind"`) {
+			t.Errorf("then fragment = %s", then)
+		}
+		if !strings.Contains(string(els), `"minLength":3`) || !strings.Contains(string(els), `"note"`) {
+			t.Errorf("else fragment = %s", els)
+		}
+	})
+
+	t.Run("requires gate carries the required list", func(t *testing.T) {
+		s := vb.Struct("Ev",
+			vb.F(start, vb.Time()),
+			vb.F(end, vb.Time()),
+			vb.F(note, vb.String()).Optional(),
+		).Gate(
+			vb.Requires(vb.FieldCmp(end, ir.OpGt, start), note),
+		).MustBuild()
+		res, _ := Emit(s.IR())
+		e := find(res.Manifest, KindGate, "requires")
+		if e == nil || e.Cond == nil || e.Then == nil {
+			t.Fatalf("requires gate = %+v", e)
+		}
+		if then, _ := json.Marshal(e.Then); !strings.Contains(string(then), `"required":["note"]`) {
+			t.Errorf("then = %s", then)
+		}
+	})
+
+	t.Run("a Go predicate stays server-only", func(t *testing.T) {
+		s := vb.Struct("Ev",
+			vb.F(start, vb.Time()),
+			vb.F(note, vb.String()).Optional(),
+		).Gate(
+			vb.When(ir.CustomCond("vip"), []ir.TargetRule{vb.On(note, ir.MinLength(2))}, nil),
+		).MustBuild()
+		res, _ := Emit(s.IR())
+		e := find(res.Manifest, KindGate, "when")
+		if e == nil {
+			t.Fatal("no gate entry")
+		}
+		if e.Cond != nil {
+			t.Errorf("a custom predicate is not executable from data: %+v", *e.Cond)
+		}
+	})
+
+	t.Run("executableCond", func(t *testing.T) {
+		yes := []ir.Condition{
+			ir.Cmp("A", ir.OpEq, 1), ir.FieldCmp("A", ir.OpGt, "B"),
+			ir.HasField("A", ir.Present), ir.In("A", 1, 2),
+			ir.And(ir.Cmp("A", ir.OpEq, 1), ir.FieldCmp("A", ir.OpGt, "B")),
+			ir.Not(ir.Cmp("A", ir.OpEq, 1)),
+		}
+		no := []ir.Condition{
+			ir.Expr("a > b"), ir.CustomCond("x"),
+			ir.And(ir.Cmp("A", ir.OpEq, 1), ir.Expr("a > b")),
+			ir.Or(ir.CustomCond("x")),
+			{Kind: ir.CondAnd}, // no operands: nothing to evaluate
+		}
+		for _, c := range yes {
+			if !executableCond(c) {
+				t.Errorf("%s should be executable", c.Kind)
+			}
+		}
+		for _, c := range no {
+			if executableCond(c) {
+				t.Errorf("%s should not be executable", c.Kind)
+			}
+		}
+	})
 }

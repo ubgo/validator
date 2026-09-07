@@ -119,7 +119,9 @@ describe("golden schema (2020-12)", () => {
 
   it("splits the manifest into non-portable and server entries", () => {
     expect(v.serverEntries.map((e) => e.ref)).toEqual(["unique_email"]);
-    expect(v.nonPortable.map((e) => e.name).sort()).toEqual(["after", "custom", "lower", "trim", "when"]);
+    // "after" is absent on purpose: it carries a condition, so the runtime
+    // executes it rather than deferring it to the server.
+    expect(v.nonPortable.map((e) => e.name).sort()).toEqual(["custom", "lower", "trim", "when"]);
     expect(v.manifest).toBe(manifest);
     expect(v.schema).toBe(schema2020);
   });
@@ -277,7 +279,8 @@ describe("non-portable reporting", () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     createValidator(schema2020, { manifest });
     createValidator(schema2020, { manifest });
-    expect(spy).toHaveBeenCalledTimes(5);
+    // Four, not five: the "after" entry is executed here, not warned about.
+    expect(spy).toHaveBeenCalledTimes(4);
     expect(spy.mock.calls[0]?.[0]).toMatch(/\$\.email: rule "custom" is opaque/);
     spy.mockRestore();
   });
@@ -285,7 +288,7 @@ describe("non-portable reporting", () => {
   it("calls the supplied hook", () => {
     const seen: ManifestEntry[] = [];
     createValidator(schema2020, { manifest, onNonPortable: (e) => seen.push(e) });
-    expect(seen.map((e) => `${e.path}:${e.name}`)).toEqual(["$.email:custom", "$.email:trim", "$.email:lower", "$.end:after", "$:when"]);
+    expect(seen.map((e) => `${e.path}:${e.name}`)).toEqual(["$.email:custom", "$.email:trim", "$.email:lower", "$:when"]);
   });
 
   it("rejects malformed manifests", () => {
@@ -441,5 +444,30 @@ describe("path helpers", () => {
     expect(valueAt({ a: [{ b: 1 }] }, ["a", "*", "b"])).toBeUndefined();
     expect(valueAt(null, ["a"])).toBeUndefined();
     expect(valueAt(5, [])).toBe(5);
+  });
+});
+
+describe("the golden schema's cross-field rule runs in the browser", () => {
+  it("reports $.end after $.start without a round trip", () => {
+    const v = createValidator(schema2020, { manifest, onNonPortable: () => undefined, serverRules: false });
+    const u = validUser();
+    // Swap the two so end precedes start; every other field stays valid.
+    const start = u["start"];
+    u["start"] = u["end"];
+    u["end"] = start;
+    const r = v.validate(u);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    const after = r.issues.find((i) => i.code === "after");
+    expect(after).toBeDefined();
+    expect(after?.path).toBe("$.end");
+    // The wording comes from the Go emitter, so it matches the server's.
+    expect(after?.message).toBe("must be after Start");
+  });
+
+  it("leaves a correctly ordered pair alone", () => {
+    const v = createValidator(schema2020, { manifest, onNonPortable: () => undefined, serverRules: false });
+    const r = v.validate(validUser());
+    expect(r.ok).toBe(true);
   });
 });

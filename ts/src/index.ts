@@ -27,6 +27,7 @@ import {
   type Manifest,
   type ManifestEntry,
 } from "./manifest.js";
+import { evaluate, executable, scopeOf } from "./conditions.js";
 import type { StandardSchemaV1 } from "./standard.js";
 import type { FromSchema, JSONSchema } from "json-schema-to-ts";
 
@@ -204,9 +205,70 @@ export function createValidator<T = unknown>(
   const compiled = ajv.compile(schema as object) as ValidateFunction;
 
   const serverEntries = manifest.entries.filter((e) => e.class === "server" && e.endpoint !== undefined);
-  const nonPortable = manifest.entries.filter((e) => !(e.class === "server" && e.endpoint !== undefined));
+  // Entries carrying a condition are executed here (see checkCrossField),
+  // so they are not "non-portable" any more and must not be warned about.
+  const crossField = executable(manifest.entries);
+  const executed = new Set<ManifestEntry>(crossField);
+  const nonPortable = manifest.entries.filter(
+    (e) => !(e.class === "server" && e.endpoint !== undefined) && !executed.has(e),
+  );
   const warn = options.onNonPortable ?? defaultWarn;
   for (const e of nonPortable) warn(e);
+
+  // Each executable entry's branch fragments are compiled once, alongside
+  // the main schema, so evaluating a gate at validate time is a condition
+  // check plus an ordinary Ajv call.
+  const branches = crossField.map((entry) => ({
+    entry,
+    then: entry.then ? (ajv.compile(entry.then as object) as ValidateFunction) : undefined,
+    else: entry.else ? (ajv.compile(entry.else as object) as ValidateFunction) : undefined,
+  }));
+
+  /**
+   * Runs the cross-field elements JSON Schema could not express.
+   *
+   * A condition that cannot be decided from the value at hand yields no
+   * issue: the server is authoritative, and reporting a violation it would
+   * not report is the one failure that makes browser validation harmful
+   * rather than merely incomplete.
+   */
+  const checkCrossField = (value: unknown): Issue[] => {
+    const out: Issue[] = [];
+    for (const b of branches) {
+      const scope = scopeOf(b.entry, value);
+      if (scope === undefined) continue;
+      const held = evaluate(b.entry.cond, scope);
+      if (held === undefined) continue;
+
+      // No branches: the condition itself is the rule (after, before).
+      if (!b.then && !b.else) {
+        if (!held) {
+          // code and message come from the Go emitter, so this is the
+          // same issue the server would produce, not a restatement of it.
+          out.push({
+            code: b.entry.code ?? b.entry.name,
+            path: b.entry.path,
+            message: b.entry.message ?? b.entry.reason,
+            rule: b.entry.name,
+            params: { field: b.entry.ref ?? "" },
+            segments: jsonPathToSegments(b.entry.path),
+          });
+        }
+        continue;
+      }
+      const branch = held ? b.then : b.else;
+      if (!branch) continue;
+      if (!branch(scope)) {
+        for (const issue of toIssues(branch.errors as ErrorObject[] | null)) {
+          // Ajv reported against the gated object; re-root the path at the
+          // object the gate guards so it matches what Go reports.
+          const path = joinPath(b.entry.path, issue.path);
+          out.push({ ...issue, path, segments: jsonPathToSegments(path) });
+        }
+      }
+    }
+    return out;
+  };
 
   const serverRules = options.serverRules ?? serverEntries.length > 0;
   const fetchImpl = options.fetch ?? globalThis.fetch;
@@ -217,8 +279,10 @@ export function createValidator<T = unknown>(
 
   const validate = (value: unknown): Result<T> => {
     const ok = compiled(value);
-    if (ok) return { ok: true, value: value as T };
-    return { ok: false, issues: finish(toIssues(compiled.errors as ErrorObject[] | null)) };
+    const cross = checkCrossField(value);
+    if (ok && cross.length === 0) return { ok: true, value: value as T };
+    const schemaIssues = ok ? [] : toIssues(compiled.errors as ErrorObject[] | null);
+    return { ok: false, issues: finish([...schemaIssues, ...cross]) };
   };
 
   const validateAsync = async (value: unknown): Promise<Result<T>> => {
@@ -423,3 +487,14 @@ class Debouncer {
 
 /** Formats path segments for messages; re-exported for adapters. */
 export { segmentsToJSONPath as formatPath };
+
+/**
+ * Re-roots a path Ajv reported against a gated object onto the object the
+ * gate guards. Ajv sees the sub-object as its own document, so its paths
+ * start at "$"; the manifest entry says where that document sits.
+ */
+function joinPath(base: string, inner: string): string {
+  if (inner === "$" || inner === "") return base;
+  if (base === "$" || base === "") return inner;
+  return base + inner.slice(1);
+}

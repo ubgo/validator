@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- Cross-field rules now run in the browser. JSON Schema cannot compare two properties, so `after`, `before` and gates keyed on a field-to-field comparison previously reached the frontend as a warning only. The manifest entry now carries `cond` (the condition tree in wire names), `then`/`else` (the branch fragments), and the `code`/`message` Go reports, and the TypeScript runtime executes them: same code, same wording, no round trip. An undecidable condition yields no issue, so the browser never reports what the server would not.
 - Cross-library benchmark against go-playground/validator (`examples/compare_bench_test.go`, fixture `examples/benchmodel`), with a test asserting the two rule sets are equivalent so the comparison is fair. Numbers published in the README and the guide, including where the interpreter is still behind.
 - Fuzz targets for every untrusted-input surface, each pinning behavioral properties rather than only absence of panics: IR decode and round-trip stability (`ir`), interpreter map input including fail-fast/accumulate first-issue agreement and lax-never-rejects (`interp`), and the HTTP handler's response contract and endpoint isolation (`rulehttp`). `task fuzz`; `task ci` runs a short smoke of each.
 - `task vuln` (govulncheck across all three modules) as its own CI job plus a weekly schedule, kept out of the deterministic code gate on purpose.

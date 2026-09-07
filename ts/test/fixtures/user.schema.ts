@@ -355,7 +355,15 @@ export const userManifest = {
       "name": "after",
       "class": "cel",
       "ref": "Start",
-      "reason": "cross-field comparison needs CEL; JSON Schema cannot compare two properties"
+      "reason": "JSON Schema cannot compare two properties; carried as a condition a runtime can evaluate",
+      "cond": {
+        "kind": "fieldcmp",
+        "field": "end",
+        "op": "gt",
+        "fieldB": "start"
+      },
+      "code": "after",
+      "message": "must be after Start"
     },
     {
       "path": "$",

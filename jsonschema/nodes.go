@@ -6,6 +6,7 @@ import (
 
 	"github.com/ubgo/validator/internal/rules"
 	"github.com/ubgo/validator/ir"
+	"github.com/ubgo/validator/verr"
 )
 
 // JSON Schema keywords. Named so a typo is a compile error and so the
@@ -295,8 +296,19 @@ func (e *emitter) rule(path string, o *Object, r ir.Rule) {
 		o.Set(kwMaximum, 180)
 	case ir.RuleAfter, ir.RuleBefore:
 		field, _ := r.Params[ir.ParamField].(string)
-		e.manifest.Add(Entry{Path: path, Kind: KindRule, Name: string(r.Kind), Class: ClassCEL, Ref: field,
-			Reason: "cross-field comparison needs CEL; JSON Schema cannot compare two properties"})
+		entry := Entry{Path: path, Kind: KindRule, Name: string(r.Kind), Class: ClassCEL, Ref: field,
+			Reason: "JSON Schema cannot compare two properties; carried as a condition a runtime can evaluate"}
+		// e.obj is the object being emitted, so the sibling's wire name is
+		// resolvable here; without it the entry is still reported, just not
+		// executable.
+		if e.obj != nil {
+			entry.Cond = crossFieldCond(e.obj, lastSeg(path), r)
+			// The same code and wording the Go executors produce, so the
+			// browser reports the identical issue.
+			code, tmpl := rules.TextFor(&r)
+			entry.Code, entry.Message = code, verr.Render(tmpl, r.Params)
+		}
+		e.manifest.Add(entry)
 	case ir.RuleCustom, ir.RuleAsync:
 		class, _ := r.EffectivePortability()
 		ref, _ := r.Params[ir.ParamRef].(string)
@@ -325,6 +337,9 @@ func (e *emitter) lossy(path string, r ir.Rule, reason string) {
 // object emits an object node: properties, required, additionalProperties,
 // defaults, lifted conditional rules and gates.
 func (e *emitter) object(path string, o *ir.ObjectNode) *Object {
+	prev := e.obj
+	e.obj = o
+	defer func() { e.obj = prev }()
 	out := NewObject().Set(kwType, tyObject)
 	props := NewObject()
 	var required []any

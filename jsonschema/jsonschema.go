@@ -118,6 +118,11 @@ type emitter struct {
 	id       string
 	schema   *ir.Schema
 	manifest Manifest
+
+	// obj is the object whose fields are being emitted, so a field's
+	// cross-field rule can resolve its sibling's wire name. Saved and
+	// restored around nested objects.
+	obj *ir.ObjectNode
 }
 
 // Object is an insertion-ordered JSON object. encoding/json sorts map
