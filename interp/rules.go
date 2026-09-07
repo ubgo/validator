@@ -118,6 +118,16 @@ func (r *run) apply(rule *ir.Rule, val reflect.Value, sc *scope) (bool, map[stri
 		return rules.CurrencyCode(val.String()), nil
 	case ir.RuleHexColor:
 		return rules.HexColor(val.String()), nil
+	case ir.RuleTimezone:
+		return rules.Timezone(val.String()), nil
+	case ir.RuleBase64URL:
+		return rules.Base64URL(val.String()), nil
+	case ir.RuleISBN:
+		return rules.ISBN(val.String()), nil
+	case ir.RuleBIC:
+		return rules.BIC(val.String()), nil
+	case ir.RuleMongoID:
+		return rules.MongoID(val.String()), nil
 	case ir.RuleE164:
 		return rules.E164(val.String()), nil
 	case ir.RuleLatitude:

@@ -172,6 +172,11 @@ func CountryCode(s string) bool  { return rules.CountryCode(s) }
 func CurrencyCode(s string) bool { return rules.CurrencyCode(s) }
 func HexColor(s string) bool     { return rules.HexColor(s) }
 func E164(s string) bool         { return rules.E164(s) }
+func Timezone(s string) bool     { return rules.Timezone(s) }
+func Base64URL(s string) bool    { return rules.Base64URL(s) }
+func ISBN(s string) bool         { return rules.ISBN(s) }
+func BIC(s string) bool          { return rules.BIC(s) }
+func MongoID(s string) bool      { return rules.MongoID(s) }
 func Latitude(f float64) bool    { return rules.Latitude(f) }
 func Longitude(f float64) bool   { return rules.Longitude(f) }
 

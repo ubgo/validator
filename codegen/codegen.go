@@ -950,7 +950,8 @@ func (g *gen) emitRule(r *ir.Rule, expr, goType, pathVar, scopePV string, scope 
 	case ir.RuleULID:
 		pass = fmt.Sprintf("rt.ULID(%s)", expr)
 	case ir.RuleIPv4, ir.RuleIPv6, ir.RuleIP, ir.RuleCIDR, ir.RuleMAC, ir.RuleHostname, ir.RuleBase64, ir.RuleJSON, ir.RuleSemver, ir.RuleDate, ir.RuleDateTime, ir.RuleNotBlank,
-		ir.RuleCreditCard, ir.RuleJWT, ir.RuleCountryCode, ir.RuleCurrencyCode, ir.RuleHexColor, ir.RuleE164:
+		ir.RuleCreditCard, ir.RuleJWT, ir.RuleCountryCode, ir.RuleCurrencyCode, ir.RuleHexColor, ir.RuleE164,
+		ir.RuleTimezone, ir.RuleBase64URL, ir.RuleISBN, ir.RuleBIC, ir.RuleMongoID:
 		pass = fmt.Sprintf("rt.%s(%s)", formatFunc[r.Kind], expr)
 	case ir.RuleLatitude, ir.RuleLongitude:
 		pass = fmt.Sprintf("rt.%s(float64(%s))", formatFunc[r.Kind], expr)
@@ -1322,6 +1323,8 @@ var formatFunc = map[ir.RuleKind]string{
 	ir.RuleDate: "Date", ir.RuleDateTime: "DateTime", ir.RuleNotBlank: "NotBlank",
 	ir.RuleCreditCard: "CreditCard", ir.RuleJWT: "JWT", ir.RuleCountryCode: "CountryCode", ir.RuleCurrencyCode: "CurrencyCode",
 	ir.RuleHexColor: "HexColor", ir.RuleE164: "E164", ir.RuleLatitude: "Latitude", ir.RuleLongitude: "Longitude",
+	ir.RuleTimezone: "Timezone", ir.RuleBase64URL: "Base64URL", ir.RuleISBN: "ISBN", ir.RuleBIC: "BIC",
+	ir.RuleMongoID: "MongoID",
 }
 
 // count renders a length operand as an int so it compares with len().

@@ -375,6 +375,7 @@ func TestConstructors(t *testing.T) {
 		IPv4(), IPv6(), IP(), CIDR(), MAC(), Hostname(), Base64(), JSON(), Semver(), Date(), DateTime(), NotBlank(),
 		CreditCard(), JWT(), CountryCode(), CurrencyCode(), HexColor(), E164(), Latitude(), Longitude(),
 		After("a"), Before("a"), Custom("f"), Async("f", "/v/f"),
+		Timezone(), Base64URL(), ISBN(), BIC(), MongoID(),
 	}
 	seen := map[RuleKind]bool{}
 	for _, r := range rules {

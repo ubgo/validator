@@ -54,6 +54,11 @@ var (
 	fContact  = vb.NewField("Contact", func(o Order) string { return o.Contact }).JSON("contact")
 	fUnits    = vb.NewField("Units", func(o Order) int { return o.Units }).JSON("units")
 	fCard     = vb.NewField("Card", func(o Order) string { return o.Card }).JSON("card")
+	fZone     = vb.NewField("Zone", func(o Order) string { return o.Zone }).JSON("zone")
+	fBook     = vb.NewField("Book", func(o Order) string { return o.Book }).JSON("book")
+	fBank     = vb.NewField("Bank", func(o Order) string { return o.Bank }).JSON("bank")
+	fOID      = vb.NewField("OID", func(o Order) string { return o.OID }).JSON("oid")
+	fToken    = vb.NewField("Token", func(o Order) string { return o.Token }).JSON("token")
 	fLat      = vb.NewField("Lat", func(o Order) float64 { return o.Lat }).JSON("lat")
 
 	fEvKind = vb.NewField("Kind", func(e Event) string { return e.Kind }).JSON("kind")
@@ -131,6 +136,13 @@ var OrderSchema = vb.Struct("Order",
 	vb.F(fContact, vb.String().Email()).NormalizeEmail().Optional(),
 	vb.F(fUnits, vb.Int[int]().Min(1)).Coerce().Optional(),
 	vb.F(fCard, vb.String().CreditCard()).Optional(),
+	// The long-tail formats, so both executors are held to the same answer
+	// on them: a checksum, a database lookup, and three grammars.
+	vb.F(fZone, vb.String().Timezone()).Optional(),
+	vb.F(fBook, vb.String().ISBN()).Optional(),
+	vb.F(fBank, vb.String().BIC()).Optional(),
+	vb.F(fOID, vb.String().MongoID()).Optional(),
+	vb.F(fToken, vb.String().Base64URL()).Optional(),
 	vb.F(fLat, vb.Float[float64]().Latitude()),
 ).
 	// An object-level rule: its subject is the whole order, not a field.

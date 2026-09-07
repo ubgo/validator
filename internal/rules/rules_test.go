@@ -365,3 +365,135 @@ func TestUUIDULIDMatchRegexp(t *testing.T) {
 		t.Error("the allocation probe did not validate its own fixtures")
 	}
 }
+
+// TestLongTailFormats covers the five formats added from go-playground's
+// long tail. Each was chosen because its grammar is fixed and
+// international; the tests below are mostly about the edges where a naive
+// implementation would be wrong.
+func TestLongTailFormats(t *testing.T) {
+	t.Run("timezone", func(t *testing.T) {
+		for _, ok := range []string{"UTC", "Europe/Berlin", "America/New_York", "Asia/Kolkata"} {
+			if !Timezone(ok) {
+				t.Errorf("Timezone(%q) should pass", ok)
+			}
+		}
+		for _, bad := range []string{"", "Mars/Olympus", "GMT+5", "Local"} {
+			if Timezone(bad) {
+				t.Errorf("Timezone(%q) should fail", bad)
+			}
+		}
+		// "Local" is refused on purpose: it is a machine-dependent alias,
+		// so accepting it would mean a value that means different things
+		// in different deployments.
+		//
+		// Casing is deliberately NOT asserted. LoadLocation reads the zone
+		// database from disk, so "europe/berlin" is accepted on a
+		// case-insensitive filesystem and refused on Linux. This function
+		// reports what the running program would do; asserting either way
+		// would make the suite pass on one platform and fail on another.
+	})
+
+	t.Run("base64url", func(t *testing.T) {
+		// Unpadded is valid and is what a JWT segment looks like; 2, 3 and
+		// 4 characters all encode a whole number of bytes.
+		for _, ok := range []string{"", "ab", "abc", "aGVsbG8", "aGVsbG8=", "a-b_cd", "YQ=="} {
+			if !Base64URL(ok) {
+				t.Errorf("Base64URL(%q) should pass", ok)
+			}
+		}
+		// A remainder of one character encodes no whole byte, padded or
+		// not, so it is invalid at any length.
+		for _, bad := range []string{"a+b/c", "aGVsbG8===", "aGVsbG8!", "aGVsbG8=x", "a", "abcde"} {
+			if Base64URL(bad) {
+				t.Errorf("Base64URL(%q) should fail", bad)
+			}
+		}
+		// The alphabets are disjoint where it matters: a standard-base64
+		// string with + or / is not valid here, and vice versa.
+		if Base64URL("a+/b") || !Base64("YQ==") {
+			t.Error("the two alphabets must not be confused")
+		}
+	})
+
+	t.Run("isbn", func(t *testing.T) {
+		for _, ok := range []string{
+			"0306406152",        // ISBN-10
+			"0-306-40615-2",     // hyphens are decoration
+			"0 306 40615 2",     // so are spaces
+			"080442957X",        // X as the check digit
+			"9780306406157",     // ISBN-13
+			"978-0-306-40615-7", // hyphenated
+		} {
+			if !ISBN(ok) {
+				t.Errorf("ISBN(%q) should pass", ok)
+			}
+		}
+		for _, bad := range []string{
+			"", "0306406153", "9780306406158", // wrong check digits
+			"030640615", "97803064061570", // wrong lengths
+			"97803064X157", // X is only valid as an ISBN-10 check digit
+			"0306,40615,2", // an unexpected separator
+		} {
+			if ISBN(bad) {
+				t.Errorf("ISBN(%q) should fail", bad)
+			}
+		}
+	})
+
+	t.Run("bic", func(t *testing.T) {
+		for _, ok := range []string{"DEUTDEFF", "DEUTDEFF500", "NEDSZAJJXXX"} {
+			if !BIC(ok) {
+				t.Errorf("BIC(%q) should pass", ok)
+			}
+		}
+		for _, bad := range []string{"", "DEUTDEF", "DEUTDEFF5", "deutdeff", "DEUT1EFF"} {
+			if BIC(bad) {
+				t.Errorf("BIC(%q) should fail", bad)
+			}
+		}
+	})
+
+	t.Run("mongoID", func(t *testing.T) {
+		for _, ok := range []string{"507f1f77bcf86cd799439011", "AAAAAAAAAAAAAAAAAAAAAAAA"} {
+			if !MongoID(ok) {
+				t.Errorf("MongoID(%q) should pass", ok)
+			}
+		}
+		for _, bad := range []string{"", "507f1f77bcf86cd79943901", "507f1f77bcf86cd7994390111", "507f1f77bcf86cd79943901g"} {
+			if MongoID(bad) {
+				t.Errorf("MongoID(%q) should fail", bad)
+			}
+		}
+	})
+
+	// Every exported pattern must be RE2, because the emitter hands them
+	// to ECMA-262 engines unchanged.
+	for name, pat := range map[string]string{
+		"bic": BICPattern, "mongo": MongoIDPattern,
+		"base64url": Base64URLPattern, "isbn": ISBNShapePattern,
+	} {
+		re, err := regexp.Compile(pat)
+		if err != nil {
+			t.Errorf("%s pattern is not RE2: %v", name, err)
+			continue
+		}
+		// And the shape patterns must at least accept what the Go check
+		// accepts, or the browser would reject a value the server takes.
+		switch name {
+		case "bic":
+			if !re.MatchString("DEUTDEFF") {
+				t.Error("the BIC pattern rejects a valid BIC")
+			}
+		case "mongo":
+			if !re.MatchString("507f1f77bcf86cd799439011") {
+				t.Error("the ObjectID pattern rejects a valid id")
+			}
+		case "isbn":
+			for _, ok := range []string{"0306406152", "978-0-306-40615-7"} {
+				if !re.MatchString(ok) {
+					t.Errorf("the ISBN shape pattern rejects %q", ok)
+				}
+			}
+		}
+	}
+}

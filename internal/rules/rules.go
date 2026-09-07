@@ -66,6 +66,11 @@ var Texts = map[ir.RuleKind]Text{
 	ir.RuleCurrencyCode: {"currency_code", "must be a three-letter currency code"},
 	ir.RuleHexColor:     {"hex_color", "must be a hex color"},
 	ir.RuleE164:         {"e164", "must be an E.164 phone number"},
+	ir.RuleTimezone:     {"timezone", "must be a valid IANA time zone"},
+	ir.RuleBase64URL:    {"base64url", "must be valid URL-safe base64"},
+	ir.RuleISBN:         {"isbn", "must be a valid ISBN"},
+	ir.RuleBIC:          {"bic", "must be a valid BIC"},
+	ir.RuleMongoID:      {"mongo_id", "must be a valid MongoDB ObjectID"},
 	ir.RuleLatitude:     {"latitude", "must be between -90 and 90"},
 	ir.RuleLongitude:    {"longitude", "must be between -180 and 180"},
 	// {label} is the sibling's wire name, falling back to {field} — the Go

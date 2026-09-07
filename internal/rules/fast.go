@@ -4,7 +4,9 @@ import (
 	"net/mail"
 	"net/url"
 	"reflect"
+	"regexp"
 	"strings"
+	"time"
 )
 
 // Allocation-free fast paths for the two format rules whose reference
@@ -372,3 +374,154 @@ func isCrockford(c byte) bool {
 	}
 	return false
 }
+
+// The long-tail formats. Each was added on one test: a fixed,
+// international grammar, checkable without a lookup table that goes
+// stale. Anything national or dialect-dependent stays a Pattern rule the
+// author owns and can correct.
+
+// bicPattern is ISO 9362: 4 letters institution, 2 letters country,
+// 2 alphanumeric location, optional 3 alphanumeric branch.
+const BICPattern = `^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$`
+
+// MongoIDPattern is a 24-character hex ObjectID.
+const MongoIDPattern = `^[0-9a-fA-F]{24}$`
+
+// Base64URLPattern is RFC 4648 §5: the URL-safe alphabet, with optional
+// padding. Length must be a multiple of 4 once padded, which the scan
+// below enforces because a regex cannot.
+const Base64URLPattern = `^[A-Za-z0-9_-]*={0,2}$`
+
+// Timezone reports whether s names a zone the Go runtime can load. It
+// answers exactly what time.LoadLocation answers, so a value that passes
+// here will not fail when the program uses it.
+//
+// "Local" is refused deliberately: it is a machine-dependent alias, not a
+// zone, and accepting it would mean a value that validates in one
+// deployment and behaves differently in another.
+//
+// One caveat worth knowing: LoadLocation reads the zone database from
+// disk, so on a case-insensitive filesystem — macOS by default — it
+// accepts "europe/berlin" as readily as "Europe/Berlin". The same input
+// is refused on Linux. This function reports what the running program
+// would do rather than imposing a stricter rule the program does not
+// follow; if canonical casing matters, pair it with a Pattern.
+func Timezone(s string) bool {
+	if s == "" || s == "Local" {
+		return false
+	}
+	_, err := time.LoadLocation(s)
+	return err == nil
+}
+
+// Base64URL reports the URL-safe alphabet with correct padding.
+func Base64URL(s string) bool {
+	if s == "" {
+		return true // an empty string encodes empty bytes, as in Base64
+	}
+	body := strings.TrimRight(s, "=")
+	if pad := len(s) - len(body); pad > 2 {
+		return false
+	} else if pad > 0 && len(s)%4 != 0 {
+		// Padding is optional in RFC 4648 §5 and a JWT segment carries
+		// none. But a string that IS padded must be padded correctly,
+		// or it is a truncated standard-base64 string rather than a
+		// deliberate unpadded one.
+		return false
+	}
+	if len(body)%4 == 1 {
+		// No amount of padding makes this a whole number of bytes.
+		return false
+	}
+	for i := 0; i < len(body); i++ {
+		c := body[i]
+		if !isAlpha(c) && !isDigit(c) && c != '-' && c != '_' {
+			return false
+		}
+	}
+	return true
+}
+
+// ISBN reports a valid ISBN-10 or ISBN-13 including its check digit.
+// Hyphens and spaces are decoration in the printed form and are ignored.
+func ISBN(s string) bool {
+	var d []byte
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '-' || c == ' ':
+		case isDigit(c), c == 'X', c == 'x':
+			d = append(d, c)
+		default:
+			return false
+		}
+	}
+	switch len(d) {
+	case 10:
+		return isbn10(d)
+	case 13:
+		return isbn13(d)
+	}
+	return false
+}
+
+// isbn10 sums each digit times its position, modulo 11. The last digit may
+// be X, standing for ten.
+func isbn10(d []byte) bool {
+	sum := 0
+	for i := 0; i < 9; i++ {
+		if !isDigit(d[i]) {
+			return false
+		}
+		sum += int(d[i]-'0') * (10 - i)
+	}
+	last := d[9]
+	switch {
+	case last == 'X' || last == 'x':
+		sum += 10
+	case isDigit(last):
+		sum += int(last - '0')
+	default:
+		return false
+	}
+	return sum%11 == 0
+}
+
+// isbn13 is the EAN-13 checksum: alternating weights of 1 and 3.
+func isbn13(d []byte) bool {
+	sum := 0
+	for i := 0; i < 13; i++ {
+		if !isDigit(d[i]) {
+			return false // X is valid only as an ISBN-10 check digit
+		}
+		w := 1
+		if i%2 == 1 {
+			w = 3
+		}
+		sum += int(d[i]-'0') * w
+	}
+	return sum%10 == 0
+}
+
+// BIC reports a SWIFT business identifier code.
+func BIC(s string) bool { return bicRe.MatchString(s) }
+
+// MongoID reports a 24-character hexadecimal ObjectID.
+func MongoID(s string) bool {
+	if len(s) != 24 {
+		return false
+	}
+	for i := 0; i < 24; i++ {
+		if !isHex(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// bicRe is compiled once; the pattern is exported for the emitter.
+var bicRe = regexp.MustCompile(BICPattern)
+
+// ISBNShapePattern is the digit SHAPE of an ISBN, for consumers that can
+// only express a pattern. It deliberately does not check the checksum,
+// which no regular expression can; the emitter reports that gap.
+const ISBNShapePattern = `^(?:[0-9][- ]?){9}[0-9Xx]$|^(?:[0-9][- ]?){12}[0-9]$`

@@ -354,7 +354,7 @@ Every field gets a builder matching its Go type. The builder decides which rule 
 
 | Go type | Builder | Rules available |
 |---|---|---|
-| `string` | `vb.String()` | `MinLength` `MaxLength` `Pattern` `Enum` `Const` `NotBlank` and formats: `Email` `URL` `UUID` `ULID` `IP` `IPv4` `IPv6` `CIDR` `MAC` `Hostname` `Base64` `JSON` `Semver` `Date` `DateTime` `CreditCard` `JWT` `CountryCode` `CurrencyCode` `HexColor` `E164` |
+| `string` | `vb.String()` | `MinLength` `MaxLength` `Pattern` `Enum` `Const` `NotBlank` and formats: `Email` `URL` `UUID` `ULID` `IP` `IPv4` `IPv6` `CIDR` `MAC` `Hostname` `Base64` `Base64URL` `JSON` `Semver` `Date` `DateTime` `Timezone` `CreditCard` `JWT` `ISBN` `BIC` `MongoID` `CountryCode` `CurrencyCode` `HexColor` `E164` |
 | `int`, `int8`…`uint64` | `vb.Int[int]()` etc. | `Min` `Max` `Gt` `Gte` `Lt` `Lte` `MultipleOf` `Enum` `Const` |
 | `float32/64` | `vb.Float[float64]()` | same as int, plus `Latitude` `Longitude` |
 | `bool` | `vb.Bool()` | `Const` |

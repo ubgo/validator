@@ -156,6 +156,23 @@ func (t *StringType) HexColor() *StringType { return t.rule(ir.HexColor()) }
 // E164 requires an E.164 phone number.
 func (t *StringType) E164() *StringType { return t.rule(ir.E164()) }
 
+// Timezone requires an IANA time zone name, "Europe/Berlin", validated
+// against the Go runtime's own database.
+func (t *StringType) Timezone() *StringType { return t.rule(ir.Timezone()) }
+
+// Base64URL requires URL-safe base64 (RFC 4648 §5), the alphabet a JWT
+// segment uses. Distinct from Base64, which is the standard alphabet.
+func (t *StringType) Base64URL() *StringType { return t.rule(ir.Base64URL()) }
+
+// ISBN requires a valid ISBN-10 or ISBN-13, checksum included.
+func (t *StringType) ISBN() *StringType { return t.rule(ir.ISBN()) }
+
+// BIC requires a SWIFT business identifier code (ISO 9362).
+func (t *StringType) BIC() *StringType { return t.rule(ir.BIC()) }
+
+// MongoID requires a MongoDB ObjectID: 24 hexadecimal characters.
+func (t *StringType) MongoID() *StringType { return t.rule(ir.MongoID()) }
+
 // Enum requires one of values.
 func (t *StringType) Enum(values ...string) *StringType {
 	anys := make([]any, len(values))

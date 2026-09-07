@@ -293,6 +293,25 @@ func (e *emitter) rule(path string, o *Object, r ir.Rule) {
 		o.Set(kwPattern, rules.HexColorPattern)
 	case ir.RuleE164:
 		o.Set(kwPattern, rules.E164Pattern)
+	case ir.RuleBIC:
+		o.Set(kwPattern, rules.BICPattern)
+	case ir.RuleMongoID:
+		o.Set(kwPattern, rules.MongoIDPattern)
+	case ir.RuleBase64URL:
+		// The alphabet is regular; the padding length rule is not, so the
+		// browser accepts a few strings Go rejects and the manifest says so.
+		o.Set(kwPattern, rules.Base64URLPattern)
+		e.lossy(path, r, "the URL-safe alphabet is checked, but padding length is not expressible as a pattern")
+	case ir.RuleISBN:
+		// A checksum cannot be a pattern. The digit shape crosses; the
+		// check digit is verified server-side.
+		o.Set(kwPattern, rules.ISBNShapePattern)
+		e.lossy(path, r, "the ISBN digit shape is checked, but the checksum is verified server-side")
+	case ir.RuleTimezone:
+		// An IANA name is a database lookup, not a grammar. Nothing
+		// meaningful crosses, so the schema says nothing and the manifest
+		// records why.
+		e.lossy(path, r, "an IANA time zone is a database lookup; JSON Schema has no form for it")
 	case ir.RuleLatitude:
 		o.Set(kwMinimum, -90)
 		o.Set(kwMaximum, 90)

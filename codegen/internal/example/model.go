@@ -49,6 +49,11 @@ type Order struct {
 	Contact  string            `json:"contact"`
 	Units    int               `json:"units"`
 	Card     string            `json:"card"`
+	Zone     string            `json:"zone"`
+	Book     string            `json:"book"`
+	Bank     string            `json:"bank"`
+	OID      string            `json:"oid"`
+	Token    string            `json:"token"`
 	Lat      float64           `json:"lat"`
 }
 

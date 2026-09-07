@@ -29,7 +29,7 @@ var (
 // they parse, so MustCompile cannot panic here.
 var (
 	pattern71 = regexp.MustCompile("^SKU-")
-	pattern90 = regexp.MustCompile("^[0-9]{5}$")
+	pattern95 = regexp.MustCompile("^[0-9]{5}$")
 )
 
 // ValidateOrder validates v against the Order schema. Generated; the semantics are
@@ -774,13 +774,78 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p77 := path.Field(".lat")
+		p77 := path.Field(".zone")
 		_ = p77
+		if v.Zone == "" {
+		} else {
+			if !(rt.Timezone(v.Zone)) {
+				rt.Fail(errs, "timezone", p77.String(), "must be a valid IANA time zone", "timezone", map[string]any{})
+			}
+		}
+	}
+	if errs.Stopped() {
+		return
+	}
+	{
+		p78 := path.Field(".book")
+		_ = p78
+		if v.Book == "" {
+		} else {
+			if !(rt.ISBN(v.Book)) {
+				rt.Fail(errs, "isbn", p78.String(), "must be a valid ISBN", "isbn", map[string]any{})
+			}
+		}
+	}
+	if errs.Stopped() {
+		return
+	}
+	{
+		p79 := path.Field(".bank")
+		_ = p79
+		if v.Bank == "" {
+		} else {
+			if !(rt.BIC(v.Bank)) {
+				rt.Fail(errs, "bic", p79.String(), "must be a valid BIC", "bic", map[string]any{})
+			}
+		}
+	}
+	if errs.Stopped() {
+		return
+	}
+	{
+		p80 := path.Field(".oid")
+		_ = p80
+		if v.OID == "" {
+		} else {
+			if !(rt.MongoID(v.OID)) {
+				rt.Fail(errs, "mongo_id", p80.String(), "must be a valid MongoDB ObjectID", "mongoID", map[string]any{})
+			}
+		}
+	}
+	if errs.Stopped() {
+		return
+	}
+	{
+		p81 := path.Field(".token")
+		_ = p81
+		if v.Token == "" {
+		} else {
+			if !(rt.Base64URL(v.Token)) {
+				rt.Fail(errs, "base64url", p81.String(), "must be valid URL-safe base64", "base64url", map[string]any{})
+			}
+		}
+	}
+	if errs.Stopped() {
+		return
+	}
+	{
+		p82 := path.Field(".lat")
+		_ = p82
 		if false {
-			rt.Required(errs, p77.String())
+			rt.Required(errs, p82.String())
 		} else {
 			if !(rt.Latitude(float64(v.Lat))) {
-				rt.Fail(errs, "latitude", p77.String(), "must be between -90 and 90", "latitude", map[string]any{})
+				rt.Fail(errs, "latitude", p82.String(), "must be between -90 and 90", "latitude", map[string]any{})
 			}
 		}
 	}
@@ -789,20 +854,20 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	}
 	if v.Type != "" && v.Type == "online" {
 		{
-			p79 := path.Field(".url")
-			_ = p79
-			x78 := v.URL
-			if !(rt.RuneLen(x78) >= int(int(1))) {
-				rt.Fail(errs, "min_length", p79.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
+			p84 := path.Field(".url")
+			_ = p84
+			x83 := v.URL
+			if !(rt.RuneLen(x83) >= int(int(1))) {
+				rt.Fail(errs, "min_length", p84.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
 			}
 		}
 	} else {
 		{
-			p81 := path.Field(".venue")
-			_ = p81
-			x80 := v.Venue
-			if !(rt.RuneLen(x80) >= int(int(1))) {
-				rt.Fail(errs, "min_length", p81.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
+			p86 := path.Field(".venue")
+			_ = p86
+			x85 := v.Venue
+			if !(rt.RuneLen(x85) >= int(int(1))) {
+				rt.Fail(errs, "min_length", p86.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
 			}
 		}
 	}
@@ -811,33 +876,33 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	}
 	if (v.Coupon != "") && !(v.Type != "" && (v.Type == "offline")) {
 		if v.Venue == "" {
-			p82 := path.Field(".venue")
-			rt.Required(errs, p82.String())
+			p87 := path.Field(".venue")
+			rt.Required(errs, p87.String())
 		}
 	}
 	if errs.Stopped() {
 		return
 	}
-	n83 := 0
+	n88 := 0
 	if v.URL != "" {
-		n83++
+		n88++
 	}
 	if v.Venue != "" {
-		n83++
+		n88++
 	}
-	if !(n83 >= 1) {
-		rt.Group(errs, path.String(), "at-least-one", []string{"URL", "Venue"}, n83)
+	if !(n88 >= 1) {
+		rt.Group(errs, path.String(), "at-least-one", []string{"URL", "Venue"}, n88)
 	}
 	if errs.Stopped() {
 		return
 	}
 	if (float64(v.Weight) > float64(v.Weight)) || (float64(v.Qty) >= float64(int(50))) {
 		{
-			p85 := path.Field(".rush")
-			_ = p85
-			x84 := v.Rush
-			if !(x84 == true) {
-				rt.Fail(errs, "const", p85.String(), "must equal {value}", "const", map[string]any{"value": true})
+			p90 := path.Field(".rush")
+			_ = p90
+			x89 := v.Rush
+			if !(x89 == true) {
+				rt.Fail(errs, "const", p90.String(), "must equal {value}", "const", map[string]any{"value": true})
 			}
 		}
 	} else {
@@ -848,11 +913,11 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	if rt.CondT(ctx, reg, "vip", *v) {
 	} else {
 		{
-			p87 := path.Field(".qty")
-			_ = p87
-			x86 := v.Qty
-			if !(float64(x86) <= float64(float64(10))) {
-				rt.Fail(errs, "lte", p87.String(), "must be at most {value}", "lte", map[string]any{"value": float64(10)})
+			p92 := path.Field(".qty")
+			_ = p92
+			x91 := v.Qty
+			if !(float64(x91) <= float64(float64(10))) {
+				rt.Fail(errs, "lte", p92.String(), "must be at most {value}", "lte", map[string]any{"value": float64(10)})
 			}
 		}
 	}
@@ -882,13 +947,13 @@ func ValidateAddressInto(ctx context.Context, v *Address, reg rt.Registry, errs 
 func validateAddress(ctx context.Context, v *Address, reg rt.Registry, path rt.Path, errs *verr.Errors) {
 	_, _, _ = ctx, reg, path
 	{
-		p88 := path.Field(".street")
-		_ = p88
+		p93 := path.Field(".street")
+		_ = p93
 		if v.Street == "" {
-			rt.Required(errs, p88.String())
+			rt.Required(errs, p93.String())
 		} else {
 			if !(rt.RuneLen(v.Street) >= int(int(1))) {
-				rt.Fail(errs, "min_length", p88.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
+				rt.Fail(errs, "min_length", p93.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
 			}
 		}
 	}
@@ -896,12 +961,12 @@ func validateAddress(ctx context.Context, v *Address, reg rt.Registry, path rt.P
 		return
 	}
 	{
-		p89 := path.Field(".zip")
-		_ = p89
+		p94 := path.Field(".zip")
+		_ = p94
 		if v.Zip == "" {
 		} else {
-			if !(pattern90.MatchString(v.Zip)) {
-				rt.Fail(errs, "pattern", p89.String(), "must match {regex}", "pattern", map[string]any{"regex": "^[0-9]{5}$"})
+			if !(pattern95.MatchString(v.Zip)) {
+				rt.Fail(errs, "pattern", p94.String(), "must match {regex}", "pattern", map[string]any{"regex": "^[0-9]{5}$"})
 			}
 		}
 	}

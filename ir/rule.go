@@ -58,6 +58,17 @@ const (
 	RuleHexColor     RuleKind = "hexColor"
 	RuleE164         RuleKind = "e164"
 
+	// The five below were chosen from go-playground's long tail on one
+	// test: is the grammar fixed, international, and checkable without a
+	// lookup table that goes stale? A national identifier or a postcode
+	// fails it — those belong in a Pattern rule the author owns, which
+	// does not pretend to be authoritative.
+	RuleTimezone  RuleKind = "timezone"
+	RuleBase64URL RuleKind = "base64url"
+	RuleISBN      RuleKind = "isbn"
+	RuleBIC       RuleKind = "bic"
+	RuleMongoID   RuleKind = "mongoID"
+
 	// Numeric formats: geographic coordinates.
 	RuleLatitude  RuleKind = "latitude"
 	RuleLongitude RuleKind = "longitude"
@@ -138,6 +149,11 @@ var ruleSpecs = map[RuleKind]ruleSpec{
 	RuleCurrencyCode: {portability: Portable},
 	RuleHexColor:     {portability: Portable},
 	RuleE164:         {portability: Portable},
+	RuleTimezone:     {portability: Portable},
+	RuleBase64URL:    {portability: Portable},
+	RuleISBN:         {portability: Portable},
+	RuleBIC:          {portability: Portable},
+	RuleMongoID:      {portability: Portable},
 	RuleLatitude:     {portability: Portable},
 	RuleLongitude:    {portability: Portable},
 	RuleAfter:        {required: []string{ParamField}, portability: Portable},
@@ -323,6 +339,28 @@ func HexColor() Rule { return Rule{Kind: RuleHexColor} }
 
 // E164 requires an international phone number in E.164 form.
 func E164() Rule { return Rule{Kind: RuleE164} }
+
+// Timezone requires an IANA time zone name, "Europe/Berlin". Validated
+// against the Go runtime's own database, so it answers what time.LoadLocation
+// would answer.
+func Timezone() Rule { return Rule{Kind: RuleTimezone} }
+
+// Base64URL requires the URL-safe base64 alphabet (RFC 4648 §5), which
+// uses - and _ where standard base64 uses + and /. Distinct from Base64:
+// a JWT segment is base64url and fails a standard-alphabet check.
+func Base64URL() Rule { return Rule{Kind: RuleBase64URL} }
+
+// ISBN requires a valid ISBN-10 or ISBN-13, checksum included. Hyphens
+// and spaces are ignored, as they are decoration in the printed form.
+func ISBN() Rule { return Rule{Kind: RuleISBN} }
+
+// BIC requires a SWIFT business identifier code (ISO 9362): four letters
+// for the institution, two for the country, two alphanumeric for the
+// location, and optionally three more for the branch.
+func BIC() Rule { return Rule{Kind: RuleBIC} }
+
+// MongoID requires a MongoDB ObjectID: 24 hexadecimal characters.
+func MongoID() Rule { return Rule{Kind: RuleMongoID} }
 
 // Latitude requires a number in [-90, 90].
 func Latitude() Rule { return Rule{Kind: RuleLatitude} }
