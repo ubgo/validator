@@ -660,6 +660,8 @@ func main() {
 
 Structural codes an executor emits without a rule: `required`, `type`, `unknown_key`, `unknown_variant`, `no_union_match`, `group`, and `custom` for a custom or async rule that returned an error.
 
+The body itself has a schema. `validatorctl ir errors`, or `jsonschema.ErrorContract()` in Go, prints the JSON Schema of `verr.Errors`, reflected from the Go types. Use it to type a non-Go client or to document a 422 response, rather than restating the shape by hand and watching it drift.
+
 To react to one kind of failure, use `errors.Is` rather than comparing code strings:
 
 ```go
@@ -1147,6 +1149,7 @@ The same three artifacts from the CLI, given the IR file:
 validatorctl ir export web/src/signup.ir.json --out web/src/signup.schema.json --ts web/src/signup.schema.ts   # --draft 07 for classic Ajv / OpenAPI 3.0
 validatorctl ir check web/src/signup.ir.json     # structural check of an IR document
 validatorctl ir contract                         # the JSON Schema of the IR format itself
+validatorctl ir errors                           # the JSON Schema of the error body it returns
 ```
 
 The Go API behind those commands, with the options the export program above did not use:
@@ -1432,6 +1435,7 @@ Every command supports `--json` for a machine-readable envelope and exits non-ze
 | `validatorctl ir check f.json` | structural check of an IR document |
 | `validatorctl ir export f.json` | JSON Schema (`--draft 2020\|07`, `--id`, `--out`), manifest (`--manifest`), TS module (`--ts`, `--name`) |
 | `validatorctl ir contract` | the JSON Schema of the IR format itself |
+| `validatorctl ir errors` | the JSON Schema of the error body a failed validation returns |
 | `validatorctl catalog` | print the default message catalog; `--check de.json` lists missing codes |
 | `validatorctl version` | build info |
 
