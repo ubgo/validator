@@ -147,6 +147,15 @@ func (f FieldRef[T, V]) JSON(name string) FieldRef[T, V] {
 	return f
 }
 
+// wire is the name this field appears under on the wire: the json tag
+// when it has one, else the Go name. It is what paths and messages show.
+func (f FieldRef[T, V]) wire() string {
+	if f.jsonName != "" {
+		return f.jsonName
+	}
+	return f.name
+}
+
 // Name returns the Go field name.
 func (f FieldRef[T, V]) Name() string { return f.name }
 

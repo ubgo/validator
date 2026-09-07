@@ -68,10 +68,16 @@ var Texts = map[ir.RuleKind]Text{
 	ir.RuleE164:         {"e164", "must be an E.164 phone number"},
 	ir.RuleLatitude:     {"latitude", "must be between -90 and 90"},
 	ir.RuleLongitude:    {"longitude", "must be between -180 and 180"},
-	ir.RuleAfter:        {"after", "must be after {field}"},
-	ir.RuleBefore:       {"before", "must be before {field}"},
-	ir.RuleCustom:       {verr.CodeCustom, "{error}"},
-	ir.RuleAsync:        {verr.CodeCustom, "{error}"},
+	// {label} is the sibling's wire name, falling back to {field} — the Go
+	// name — when a rule was built without one. Render fills whichever is
+	// present, so both spellings work.
+	ir.RuleAfter:  {"after", "must be after {label}"},
+	ir.RuleBefore: {"before", "must be before {label}"},
+	// Note for both: {label} is the sibling's wire name. LabelParams
+	// supplies it from ParamField when a document carries no label, so a
+	// hand-written IR renders a name rather than the placeholder.
+	ir.RuleCustom: {verr.CodeCustom, "{error}"},
+	ir.RuleAsync:  {verr.CodeCustom, "{error}"},
 }
 
 // TextFor returns the code and template for a rule, honoring its Meta
@@ -368,4 +374,35 @@ func In(v any, values []any) bool {
 		}
 	}
 	return false
+}
+
+// LabelParams returns the message parameters for a rule, filling in the
+// {label} placeholder that the cross-field rules render.
+//
+// A rule built through vb carries ParamLabel, the sibling's wire name, so
+// the message names the field the same way the path does. A rule decoded
+// from a hand-written IR document may not; rather than render a literal
+// "{label}", the Go field name stands in. Both executors call this, so
+// there is one answer to what a cross-field message says.
+func LabelParams(r *ir.Rule, params map[string]any) map[string]any {
+	switch r.Kind {
+	case ir.RuleAfter, ir.RuleBefore:
+	default:
+		return params
+	}
+	if _, has := params[ir.ParamLabel]; has {
+		return params
+	}
+	field, ok := params[ir.ParamField]
+	if !ok {
+		return params
+	}
+	// Copy: the caller's map may be the rule's own params, which are
+	// shared with every other run of this schema.
+	out := make(map[string]any, len(params)+1)
+	for k, v := range params {
+		out[k] = v
+	}
+	out[ir.ParamLabel] = field
+	return out
 }

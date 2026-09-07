@@ -163,7 +163,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		if v.Ship == nil {
 		} else {
 			if !(v.Placed.IsZero() || (*v.Ship).After(v.Placed)) {
-				rt.Fail(errs, "after", p13.String(), "must be after {field}", "after", map[string]any{"field": "Placed"})
+				rt.Fail(errs, "after", p13.String(), "must be after {label}", "after", map[string]any{"field": "Placed", "label": "placed"})
 			}
 		}
 	}

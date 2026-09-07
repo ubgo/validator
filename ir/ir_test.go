@@ -35,7 +35,7 @@ func userSchema() *Schema {
 				{Name: "Active", JSONName: "active", Type: &BoolNode{}},
 				{Name: "Avatar", JSONName: "avatar", Optional: true, Type: &BytesNode{Base: Base{Nullable: true}}},
 				{Name: "Start", JSONName: "start", Type: &TimeNode{}},
-				{Name: "End", JSONName: "end", Type: &TimeNode{Rules: []Rule{After("Start")}}},
+				{Name: "End", JSONName: "end", Type: &TimeNode{Rules: []Rule{AfterLabeled("Start", "start")}}},
 				{Name: "TTL", JSONName: "ttl", Type: &DurationNode{Rules: []Rule{Gt(0)}}},
 				{Name: "Tags", JSONName: "tags", Type: &ArrayNode{
 					Elem:  &StringNode{Rules: []Rule{MinLength(1), Enum("a", "b")}},

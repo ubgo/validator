@@ -363,7 +363,7 @@ export const userManifest = {
         "fieldB": "start"
       },
       "code": "after",
-      "message": "must be after Start"
+      "message": "must be after start"
     },
     {
       "path": "$",

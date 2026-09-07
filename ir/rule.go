@@ -76,10 +76,17 @@ const (
 // open question Q2: flexible on the wire, typed through these constants and
 // the constructors below, so no caller writes a bare "value" string).
 const (
-	ParamValue    = "value"
-	ParamValues   = "values"
-	ParamRegex    = "regex"
-	ParamField    = "field"
+	ParamValue  = "value"
+	ParamValues = "values"
+	ParamRegex  = "regex"
+	ParamField  = "field"
+
+	// ParamLabel is the WIRE name of the field ParamField resolves, carried
+	// only so a message can name what the user sees. Paths use wire names
+	// everywhere, so a message that said "must be after CheckIn" beside a
+	// path of "$.check_out" was showing two names for one field. Optional:
+	// when absent the message falls back to ParamField.
+	ParamLabel    = "label"
 	ParamRef      = "ref"
 	ParamEndpoint = "endpoint"
 )
@@ -326,8 +333,28 @@ func Longitude() Rule { return Rule{Kind: RuleLongitude} }
 // After requires this value to be later than the sibling field named.
 func After(field string) Rule { return single(RuleAfter, ParamField, field) }
 
+// AfterLabeled is [After] with the sibling's wire name for the message.
+// The Go name still resolves the sibling; the label is what the reader
+// sees, and matches the path they see beside it.
+func AfterLabeled(field, label string) Rule {
+	r := After(field)
+	if label != "" && label != field {
+		r.Params[ParamLabel] = label
+	}
+	return r
+}
+
 // Before requires this value to be earlier than the sibling field named.
 func Before(field string) Rule { return single(RuleBefore, ParamField, field) }
+
+// BeforeLabeled is [Before] with the sibling's wire name for the message.
+func BeforeLabeled(field, label string) Rule {
+	r := Before(field)
+	if label != "" && label != field {
+		r.Params[ParamLabel] = label
+	}
+	return r
+}
 
 // Custom references a Go function registered under ref. The IR stores only
 // the name — the function itself lives in a registry the executor owns —

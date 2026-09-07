@@ -27,6 +27,7 @@ func (r *run) rules(path string, rs []ir.Rule, val reflect.Value, sc *scope) {
 		params := make(map[string]any, len(rule.Params)+len(extra))
 		maps.Copy(params, rule.Params)
 		maps.Copy(params, extra)
+		params = rules.LabelParams(rule, params)
 		code, tmpl := rules.TextFor(rule)
 		r.issue(verr.Issue{
 			Code: code, Path: path, Rule: string(rule.Kind),

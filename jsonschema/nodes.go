@@ -311,7 +311,9 @@ func (e *emitter) rule(path string, o *Object, r ir.Rule) {
 			// The same code and wording the Go executors produce, so the
 			// browser reports the identical issue.
 			code, tmpl := rules.TextFor(&r)
-			entry.Code, entry.Message = code, verr.Render(tmpl, r.Params)
+			// LabelParams first: the message names the sibling by its wire
+			// name, which is what the browser and the path both use.
+			entry.Code, entry.Message = code, verr.Render(tmpl, rules.LabelParams(&r, r.Params))
 		}
 		e.manifest.Add(entry)
 	case ir.RuleCustom, ir.RuleAsync:

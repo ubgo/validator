@@ -462,7 +462,9 @@ describe("the golden schema's cross-field rule runs in the browser", () => {
     expect(after).toBeDefined();
     expect(after?.path).toBe("$.end");
     // The wording comes from the Go emitter, so it matches the server's.
-    expect(after?.message).toBe("must be after Start");
+    // The wire name, not the Go name: the message must name the field the
+    // same way the path beside it does.
+    expect(after?.message).toBe("must be after start");
   });
 
   it("leaves a correctly ordered pair alone", () => {

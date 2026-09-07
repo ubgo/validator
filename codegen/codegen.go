@@ -895,7 +895,10 @@ func (g *gen) emitRules(rs []ir.Rule, expr, goType, pathVar, scopePV string, sco
 // emitRule emits `if !(pass) { fail }` for one rule.
 func (g *gen) emitRule(r *ir.Rule, expr, goType, pathVar, scopePV string, scope map[string]field) {
 	code, tmpl := rules.TextFor(r)
-	params := goLiteral(r.Params)
+	// Generated code embeds the params as a literal, so the {label}
+	// fallback is applied here, once, at generation time rather than on
+	// every call.
+	params := goLiteral(rules.LabelParams(r, r.Params))
 	fail := fmt.Sprintf("rt.Fail(errs, %q, %s.String(), %q, %q, %s)", code, pathVar, tmpl, string(r.Kind), params)
 	var pass string
 	switch r.Kind {

@@ -1,0 +1,123 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Booking — ubgo/validator</title>
+<style>
+  body { font: 15px system-ui, sans-serif; max-width: 34rem; margin: 3rem auto; padding: 0 1rem; }
+  label { display: block; margin: .9rem 0 .2rem; font-weight: 600; }
+  input, select { width: 100%; padding: .5rem; font: inherit; box-sizing: border-box; }
+  .err { color: #b00020; font-size: .85rem; min-height: 1.1rem; }
+  button { margin-top: 1.2rem; padding: .6rem 1.2rem; font: inherit; }
+  #out { margin-top: 1.2rem; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: .85rem; }
+  .note { color: #555; font-size: .85rem; }
+</style>
+
+<h1>Book a room</h1>
+<p class="note">
+  Every rule below was written once, in Go. This page never restates one.
+  Open the console to see which rules the browser is told it cannot run.
+</p>
+
+<form id="f">
+  <label>Email <input name="email" value="taken@example.com"></label>
+  <div class="err" data-for="$.email"></div>
+
+  <label>Check in <input name="check_in" type="date" value="2026-03-10"></label>
+  <div class="err" data-for="$.check_in"></div>
+
+  <label>Check out <input name="check_out" type="date" value="2026-03-05"></label>
+  <div class="err" data-for="$.check_out"></div>
+
+  <label>Guests <input name="guests" type="number" value="4"></label>
+  <div class="err" data-for="$.guests"></div>
+
+  <label>Room
+    <select name="room">
+      <option value="single">single</option>
+      <option value="double">double</option>
+      <option value="suite">suite</option>
+    </select>
+  </label>
+  <div class="err" data-for="$.room"></div>
+
+  <label>Note <input name="note"></label>
+  <div class="err" data-for="$.note"></div>
+
+  <div class="err" data-for="$"></div>
+  <button>Book</button>
+</form>
+
+<div id="out"></div>
+
+<script type="module">
+// The schema and the manifest, generated from the Go rules. Nothing in
+// this file knows what "guests" may be; it only knows how to render an
+// issue next to the input its path names.
+import { bookingSchema, bookingManifest } from "./booking.schema.js";
+import { createValidator } from "https://esm.sh/@ubgo/validator";
+
+const booking = createValidator(bookingSchema, {
+  manifest: bookingManifest,
+  onNonPortable: (e) =>
+    console.info(`server-only: ${e.path} ${e.name} (${e.class}) — ${e.reason}`),
+});
+
+const form = document.querySelector("#f");
+const out = document.querySelector("#out");
+
+// Read the form into the shape the schema describes. Dates become RFC 3339
+// because that is what a time field looks like on the wire.
+function read() {
+  const d = Object.fromEntries(new FormData(form));
+  return {
+    email: d.email,
+    check_in: d.check_in ? new Date(d.check_in).toISOString() : "",
+    check_out: d.check_out ? new Date(d.check_out).toISOString() : "",
+    guests: Number(d.guests),
+    room: d.room,
+    ...(d.note ? { note: d.note } : {}),
+  };
+}
+
+function show(issues) {
+  for (const el of document.querySelectorAll(".err")) el.textContent = "";
+  for (const i of issues) {
+    const el = document.querySelector(`.err[data-for="${i.path}"]`);
+    if (el) el.textContent = i.message;
+    else console.warn("no slot for", i.path, i.message);
+  }
+}
+
+// Validate as the user types: the rules the browser can run, instantly.
+form.addEventListener("input", () => {
+  const r = booking.validate(read());
+  show(r.ok ? [] : r.issues);
+});
+
+// On submit the server decides. Its issues have the same codes and paths,
+// so the same renderer handles them.
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = read();
+
+  const local = await booking.validateAsync(body);
+  if (!local.ok) {
+    show(local.issues);
+    out.textContent = "blocked in the browser, no request sent";
+    return;
+  }
+
+  const res = await fetch("/api/bookings", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (res.status === 422) {
+    show(data.issues);
+    out.textContent = "rejected by the server";
+    return;
+  }
+  show([]);
+  out.textContent = JSON.stringify(data, null, 2);
+});
+</script>

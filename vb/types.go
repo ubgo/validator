@@ -498,12 +498,12 @@ func (t *TimeType) Msg(code, message string) *TimeType {
 // After requires this time to be later than the sibling field. Taking a
 // [FieldRef] rather than a string keeps the reference rename-safe.
 func After[T any](other FieldRef[T, time.Time]) func(*TimeType) *TimeType {
-	return func(t *TimeType) *TimeType { return t.rule(ir.After(other.name)) }
+	return func(t *TimeType) *TimeType { return t.rule(ir.AfterLabeled(other.name, other.wire())) }
 }
 
 // Before requires this time to be earlier than the sibling field.
 func Before[T any](other FieldRef[T, time.Time]) func(*TimeType) *TimeType {
-	return func(t *TimeType) *TimeType { return t.rule(ir.Before(other.name)) }
+	return func(t *TimeType) *TimeType { return t.rule(ir.BeforeLabeled(other.name, other.wire())) }
 }
 
 // AfterField is [After] keyed by Go field name, for generated or migrated
