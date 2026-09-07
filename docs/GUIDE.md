@@ -1213,8 +1213,8 @@ flowchart TD
     COND["conditions.ts, inside it<br/>runs cross-field rules"]
 
     R --> IR
-    IR -->|validatorctl ir export| JS
-    IR -->|validatorctl ir export| MAN
+    IR -- "validatorctl ir export" --> JS
+    IR -- "validatorctl ir export" --> MAN
     JS --> PKG
     MAN --> PKG
     PKG --> AJV
