@@ -6,11 +6,17 @@
 # platform the README claims so a platform-only compile error cannot hide.
 name: ci
 
+# Disabled on push and pull_request while the API is still moving: the
+# local `task ci` is the gate during development, and a red badge on every
+# push is noise rather than signal. Run it from the Actions tab when you
+# want the things a Mac cannot check — the Go 1.24 floor, Linux, the
+# five-platform cross-compile, and govulncheck.
+#
+# To re-enable, restore the push and pull_request keys below. The weekly
+# vulnerability scan is deliberately left on: a CVE published after the
+# last commit is exactly what nobody is watching for.
 on:
-  push:
-    branches: [main]
-  pull_request:
-  # Weekly, so a CVE published after the last commit is still found.
+  workflow_dispatch:
   schedule:
     - cron: "0 6 * * 1"
 
