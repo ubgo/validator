@@ -19,3 +19,5 @@ require (
 )
 
 replace github.com/ubgo/validator => ../
+
+replace github.com/ubgo/validator/cel => ../cel

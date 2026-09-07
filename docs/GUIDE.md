@@ -7,7 +7,7 @@ The files this guide shows live in `examples/guide/` and are compiled by the bui
 1. [What it is, in one picture](#1-what-it-is-in-one-picture)
 2. [Quickstart in five steps](#2-quickstart-in-five-steps)
 3. [The workflow, end to end](#3-the-workflow-end-to-end)
-4. [Authoring rules: every feature](#4-authoring-rules-every-feature) (types, fields, nesting, gates, variants, map input, presence, results, custom and async, messages, unknown keys, foreign IR)
+4. [Authoring rules: every feature](#4-authoring-rules-every-feature) (types, fields, nesting, gates, variants, map input, presence, results, custom and async, messages, unknown keys, foreign IR, expressions)
 5. [Exporting: JSON Schema, manifest, TypeScript](#5-exporting-json-schema-manifest-typescript)
 6. [The frontend runtime](#6-the-frontend-runtime)
 7. [Production: the generated executor](#7-production-the-generated-executor)
@@ -59,6 +59,8 @@ Every file below is in the repository at `examples/guide/`, compiled by the buil
 go get github.com/ubgo/validator
 go install github.com/ubgo/validator/cli/cmd/validatorctl@latest
 ```
+
+The library itself has no third-party dependencies. The one optional extra is the expression engine, a separate module you add only if you use it (4.13).
 
 ### Step 2: have a struct
 
@@ -424,7 +426,7 @@ Conditions: `vb.Eq(ref, v)`, `vb.Cmp(ref, ir.OpGt, v)`, `vb.In(ref, a, b)`, `vb.
 )
 ```
 
-In JSON Schema these become `if`/`then`/`else` blocks, which Ajv runs natively. Arithmetic between fields (`end - start < 30 days`) is the one thing conditions cannot express yet; that is the planned CEL layer (`ir.Expr("...")` exists in the IR and is refused by both executors until then).
+In JSON Schema these become `if`/`then`/`else` blocks, which Ajv runs natively. Arithmetic between fields, `end - start < 30 days`, is the one thing this vocabulary cannot state; that is what expressions are for, in 4.13 below.
 
 A condition can also be a Go predicate, by name. The gate says `ir.CustomCond("vip")`; a registry supplies the function. The predicate is Go-only, so the manifest lists it and the browser skips the gate.
 
@@ -875,7 +877,9 @@ func main() {
 
 	// The document only names custom and async rules; a registry supplies the
 	// bodies. Here the vb schema that produced the file is the registry.
-	v, err := interp.New(&doc, interp.WithFuncs(signup.Schema)) // refuses unresolved names and CEL
+	// Refuses unresolved custom names, and expressions unless you also pass
+	// interp.WithExpr (see 4.13).
+	v, err := interp.New(&doc, interp.WithFuncs(signup.Schema))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -884,6 +888,102 @@ func main() {
 ```
 
 `validatorctl ir check file.json` runs the same check from the shell, and `validatorctl ir contract` (`jsonschema.Contract()` in Go) prints the JSON Schema the file must conform to. `schema.Getter("Email")` returns the accessor for a root field by Go name, for tools that map issues back to struct fields.
+
+### 4.13 Expressions: arithmetic and aggregation
+
+Everything above compares a field to a literal or to another field. What it cannot do is arithmetic. "The stay is longer than a week" is `end - start`, not a comparison, and neither is "the total equals the sum of the line prices". For those the IR carries a [CEL](https://cel.dev) expression, which is still data, still serializable, and still not a closure.
+
+The engine is a separate module, because the core has no third-party dependencies and most schemas never use an expression:
+
+```sh
+go get github.com/ubgo/validator/cel
+```
+
+A complete program:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/ubgo/validator/cel"
+	"github.com/ubgo/validator/interp"
+	"github.com/ubgo/validator/ir"
+	"github.com/ubgo/validator/vb"
+)
+
+// Stay is a booking. The rule worth having is about the SPAN between two
+// dates, which is arithmetic, so no comparison can state it.
+type Stay struct {
+	Start  time.Time `json:"start"`
+	End    time.Time `json:"end"`
+	Guests int       `json:"guests"`
+	Note   string    `json:"note"`
+}
+
+var (
+	fStart  = vb.NewField("Start", func(s Stay) time.Time { return s.Start }).JSON("start")
+	fEnd    = vb.NewField("End", func(s Stay) time.Time { return s.End }).JSON("end")
+	fGuests = vb.NewField("Guests", func(s Stay) int { return s.Guests }).JSON("guests")
+	fNote   = vb.NewField("Note", func(s Stay) string { return s.Note }).JSON("note")
+)
+
+// Inside an expression a field is named by its WIRE name, the same name the
+// JSON Schema export and the browser use.
+var Schema = vb.Struct("Stay",
+	vb.F(fStart, vb.Time()),
+	vb.F(fEnd, vb.Time()),
+	vb.F(fGuests, vb.Int[int]().Min(1)),
+	vb.F(fNote, vb.String().MinLength(3)).Optional(),
+).Gate(
+	vb.Requires(ir.Expr(`end - start > duration('168h')`), fNote),
+	vb.When(ir.Expr(`guests > 4`), []ir.TargetRule{vb.On(fNote, ir.MinLength(10))}, nil),
+).MustBuild()
+
+func main() {
+	// Without WithExpr this call fails: an expression is refused at startup,
+	// never skipped at request time.
+	v, err := interp.FromSchema(Schema, interp.WithExpr(cel.New()))
+	if err != nil {
+		log.Fatal(err)
+	}
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	long := Stay{Start: jan1, End: jan1.AddDate(0, 0, 10), Guests: 2}
+	fmt.Println(v.Validate(context.Background(), &long)) // $.note: field is required
+
+	short := Stay{Start: jan1, End: jan1.AddDate(0, 0, 2), Guests: 2}
+	fmt.Println(v.Validate(context.Background(), &short)) // <nil>
+}
+```
+
+What to know before using one:
+
+| | |
+|---|---|
+| Variables | the enclosing object's fields, by wire name. Naming a field the schema does not have is a startup error, not a runtime one. |
+| Absent fields | always bound, as `null`. Write `note == null` to test for absence. |
+| Times | `time.Time` on struct input. On map input a time is a string, so write `timestamp(end) - timestamp(start)`. |
+| Result | must be boolean. Anything else is refused at startup. |
+| Failure to evaluate | reads as false, so a gate never fires on a value its condition could not judge. Note that CEL follows IEEE 754, so dividing a double by zero yields infinity rather than failing. |
+| Cost | bounded. `cel.DefaultTimeout` caps one evaluation; change it with `cel.WithTimeout`, and add your own functions with `cel.WithEnv`. |
+
+In generated code, expressions are not compiled to Go. Two implementations of a language drift apart, so gates that need one are handed back to the interpreter for that object, and your registry supplies the engine:
+
+```go
+type Registry struct{}
+
+func (Registry) Func(name string) (vb.Func, bool)   { return Schema.Func(name) }
+func (Registry) ExprCompiler() interp.ExprCompiler  { return cel.New() }
+```
+
+Leave that method off and the delegation reports a `custom` issue rather than quietly passing.
+
+Expressions do not cross to the browser. The manifest classes them `cel`, the frontend warns, and the server decides. The comparison-based conditions in 4.4 are the ones that run in both places.
 
 ## 5. Exporting: JSON Schema, manifest, TypeScript
 
@@ -1130,7 +1230,7 @@ func main() {
 }
 ```
 
-The third argument is the registry that resolves custom and async rules by name; your `vb.Schema` is one, and any type with `Func(name) (vb.Func, bool)` works. A registry that also offers `TypedFunc(name) (any, bool)` returning the original typed function lets the generated code call it without boxing (your `vb.Schema` does). Generated code and the interpreter are conformance-tested to produce identical issues, so you can switch between them without behavior change. The parts a generator cannot type statically, a discriminated union on an `any` field or a union with collection variants, run the interpreter on that subtree at the same path, so the only thing `gen` refuses is CEL.
+The third argument is the registry that resolves custom and async rules by name; your `vb.Schema` is one, and any type with `Func(name) (vb.Func, bool)` works. A registry that also offers `TypedFunc(name) (any, bool)` returning the original typed function lets the generated code call it without boxing (your `vb.Schema` does). Generated code and the interpreter are conformance-tested to produce identical issues, so you can switch between them without behavior change. The parts a generator cannot type statically, a discriminated union on an `any` field or a union with collection variants, run the interpreter on that subtree at the same path. Gates whose condition is an expression take the same route, so `gen` refuses nothing; see 4.13.
 
 On the repository's own fixture, which is deliberately heavy (a union, a discriminated union, transforms, two custom rules, a gate predicate):
 
@@ -1189,7 +1289,7 @@ The migration reads `validate:"..."` tags on the root struct and every struct it
 
 From Go instead of the shell: `tags.Migrate(tags.Options{Dir, Type})` returns the IR, the migration order and `Unsupported` entries; `tags.Builder(schema, types, tags.BuilderOptions{Package})` renders the `vb` source; `accessors.Generate(accessors.Options{Dir})` is the `fields` command.
 
-Honesty rules the migration follows: a field without `required` becomes `Optional`; `min`/`max`/`len` on strings and collections are lengths, on numbers bounds; `gt`/`lt` on lengths become inclusive by one; `oneof` becomes `Enum`; `eqfield` and friends on time fields become `After`/`Before`, on anything else they are reported (they need the CEL layer).
+Honesty rules the migration follows: a field without `required` becomes `Optional`; `min`/`max`/`len` on strings and collections are lengths, on numbers bounds; `gt`/`lt` on lengths become inclusive by one; `oneof` becomes `Enum`; `eqfield` and friends on time fields become `After`/`Before`; on anything else they are reported, and an expression (4.13) is usually the answer.
 
 ## 9. CLI reference
 
@@ -1219,6 +1319,8 @@ Every command supports `--json` for a machine-readable envelope and exits non-ze
 | `.Coerce()` | runs on map input | Ajv `coerceTypes` for the whole schema | manifest `lossy` |
 | `.NoCoerce()` | pins the field | cannot exempt one property | manifest `lossy` |
 | `MaxLength` on `[]byte` | bytes | characters of the base64 string | manifest `lossy` |
+| `ir.Expr("...")` with the CEL module | runs | server enforces | manifest `cel` |
+| `ir.Expr("...")` without it | refused at `New` | n/a | startup error |
 | Regex with lookahead, named groups, inline flags | refused at `MustBuild` | n/a | build error |
 
 The design promise is that this table is exhaustive by construction: the emitter has no code path that drops a rule without adding a manifest entry.
@@ -1240,6 +1342,8 @@ This covers `after`, `before`, and any gate whose condition is built from compar
 **Can I write the IR JSON by hand or from another language?** Yes. `validatorctl ir contract` gives you the schema, `validatorctl ir check` validates a document, and `interp.New(&schema, interp.WithFuncs(registry))` runs it. Names of custom rules must then be resolved by a registry you supply.
 
 **Why not just export Zod?** Zod is on the roadmap as an eject target. JSON Schema was chosen first because it is what OpenAPI, Ajv, and most other languages already consume, and Standard Schema makes the Ajv-backed validator usable wherever Zod would be.
+
+**Do I need the CEL module?** Only for arithmetic or aggregation across fields. Comparing two fields, including time ordering, is a typed condition and needs nothing extra, and those run in the browser too. See 4.13.
 
 **What about struct tags?** They are a migration input only. Tags are opaque strings that cannot be type-checked or exported faithfully, which is the problem this library exists to remove.
 

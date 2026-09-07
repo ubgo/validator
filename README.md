@@ -35,6 +35,7 @@ Across the Go validators we surveyed, one capability combination is held by nobo
 | `accessors/` | `validatorctl fields`: generates `<Type>Fields` accessors so rules name fields by symbol, not string. |
 | `rulehttp/` | Serves async rules over HTTP for the frontend round-trip: opt-in, rate-limited, auth hook. |
 | `ts/` | `@ubgo/validator`, the TypeScript runtime: Ajv + Standard Schema + manifest-aware round-trips. |
+| `cel/` | Optional expression engine, its own module so the library keeps zero dependencies. Adds arithmetic and aggregation across fields. |
 
 ## Install
 
@@ -43,7 +44,12 @@ Requires Go 1.24 or later; CI builds every push on 1.24 and on the current relea
 ```sh
 go get github.com/ubgo/validator
 go install github.com/ubgo/validator/cli/cmd/validatorctl@latest
+
+# Only if you need expressions (arithmetic or aggregation across fields):
+go get github.com/ubgo/validator/cel
 ```
+
+The library has no third-party dependencies. The expression engine is a separate module so that stays true for everyone who does not use it.
 
 ## Roadmap (v1)
 
