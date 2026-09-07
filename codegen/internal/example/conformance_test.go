@@ -61,11 +61,15 @@ func TestConformance(t *testing.T) {
 	ptr := func(s string) *string { return &s }
 	mut := func(f func(*Order)) Order { o := validOrder(); f(&o); return o }
 	cases := map[string]Order{
-		"valid":              validOrder(),
-		"zero":               {},
-		"bad email":          mut(func(o *Order) { o.Email = "nope" }),
-		"temp email":         mut(func(o *Order) { o.Email = "x@temp.com" }),
-		"taken email":        mut(func(o *Order) { o.Email = "taken@example.com" }),
+		"valid":       validOrder(),
+		"zero":        {},
+		"bad email":   mut(func(o *Order) { o.Email = "nope" }),
+		"temp email":  mut(func(o *Order) { o.Email = "x@temp.com" }),
+		"taken email": mut(func(o *Order) { o.Email = "taken@example.com" }),
+		// Object-level rule: fires only on a COMBINATION of fields, which
+		// is the case no field rule and no gate can express.
+		"object rule fires":  mut(func(o *Order) { o.Qty = 60; o.Type = "offline"; o.Venue = "hall" }),
+		"object rule quiet":  mut(func(o *Order) { o.Qty = 60 }),
 		"qty low":            mut(func(o *Order) { o.Qty = 0 }),
 		"qty high":           mut(func(o *Order) { o.Qty = 101 }),
 		"weight":             mut(func(o *Order) { o.Weight = 0 }),

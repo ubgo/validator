@@ -74,55 +74,6 @@
         }
       }
     },
-    "Transform": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string"
-        },
-        "phase": {
-          "type": "string"
-        },
-        "params": {
-          "type": "object",
-          "additionalProperties": {}
-        }
-      },
-      "required": [
-        "kind",
-        "phase"
-      ]
-    },
-    "FieldNode": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "json": {
-          "type": "string"
-        },
-        "type": {
-          "$ref": "#/$defs/TypeNode"
-        },
-        "optional": {
-          "type": "boolean"
-        },
-        "transforms": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/Transform"
-          }
-        },
-        "meta": {
-          "$ref": "#/$defs/NodeMeta"
-        }
-      },
-      "required": [
-        "name",
-        "type"
-      ]
-    },
     "Condition": {
       "type": "object",
       "properties": {
@@ -182,6 +133,55 @@
       },
       "required": [
         "kind"
+      ]
+    },
+    "Transform": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "kind",
+        "phase"
+      ]
+    },
+    "FieldNode": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "json": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/TypeNode"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "transforms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Transform"
+          }
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        }
+      },
+      "required": [
+        "name",
+        "type"
       ]
     },
     "TargetRule": {
@@ -245,6 +245,12 @@
         },
         "meta": {
           "$ref": "#/$defs/NodeMeta"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
         },
         "fields": {
           "type": "array",

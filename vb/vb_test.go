@@ -256,6 +256,23 @@ func TestImmutability(t *testing.T) {
 	if one.Default(Any[any]()).def == nil || one.def != nil {
 		t.Error("oneof default mutated")
 	}
+	// StructBuilder is a value too: deriving two schemas from one base must
+	// not let the first's gates leak into the second.
+	sb := Struct("Address", F(addressFields.Street, String()))
+	g1 := sb.Gate(Group(ir.AtLeastOne, addressFields.Street))
+	if len(sb.obj.node.Gated) != 0 {
+		t.Error("StructBuilder.Gate mutated its receiver")
+	}
+	if len(g1.obj.node.Gated) != 1 {
+		t.Error("StructBuilder.Gate did not attach the gate")
+	}
+	if sb.Extra(ir.ExtraForbid).obj.node.Extra != ir.ExtraForbid || sb.obj.node.Extra != "" {
+		t.Error("StructBuilder.Extra mutated its receiver")
+	}
+	if sb.Source("x").meta.Source != "x" || sb.meta.Source != "" {
+		t.Error("StructBuilder.Source mutated its receiver")
+	}
+
 	f := F(addressFields.Street, String())
 	if len(f.Trim().transforms) != 1 || len(f.transforms) != 0 {
 		t.Error("field builder mutated")
@@ -545,5 +562,76 @@ func TestNoCoerceAndTypedFunc(t *testing.T) {
 	var te *TypeError
 	if err := boxed(context.Background(), "3"); !errors.As(err, &te) {
 		t.Errorf("boxed mismatch: %v", err)
+	}
+}
+
+// TestObjectLevelRules covers the shape of check that has no owning
+// field: its subject is the whole struct. A gate cannot express it,
+// because a gate decides whether other rules apply and reports nothing of
+// its own, so before object rules existed this was simply unsayable.
+func TestObjectLevelRules(t *testing.T) {
+	type Span struct {
+		Lo, Hi int
+	}
+	fLo := NewField("Lo", func(s Span) int { return s.Lo }).JSON("lo")
+	fHi := NewField("Hi", func(s Span) int { return s.Hi }).JSON("hi")
+
+	s, err := Struct("Span", F(fLo, Int[int]()), F(fHi, Int[int]())).
+		Custom("ordered", func(_ context.Context, v Span) error {
+			if v.Lo > v.Hi {
+				return errors.New("lo must not exceed hi")
+			}
+			return nil
+		}).
+		Async("free", "/v/span_free", func(_ context.Context, v Span) error { return nil }).
+		Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	obj, ok := s.IR().Root.(*ir.ObjectNode)
+	if !ok {
+		t.Fatal("root is not an object")
+	}
+	if len(obj.Rules) != 2 {
+		t.Fatalf("object carries %d rules, want 2", len(obj.Rules))
+	}
+	if obj.Rules[0].Kind != ir.RuleCustom || obj.Rules[1].Kind != ir.RuleAsync {
+		t.Errorf("rules = %+v", obj.Rules)
+	}
+	// Order is the order of declaration, because it is the order issues
+	// will be reported in.
+	if obj.Rules[0].Params[ir.ParamRef] != "ordered" {
+		t.Errorf("first rule ref = %v", obj.Rules[0].Params[ir.ParamRef])
+	}
+
+	// The bodies are registered under their names, typed.
+	if _, found := s.Func("ordered"); !found {
+		t.Error("custom body not registered")
+	}
+	raw, found := s.TypedFunc("ordered")
+	if !found {
+		t.Fatal("typed body not registered")
+	}
+	if _, isTyped := raw.(func(context.Context, Span) error); !isTyped {
+		t.Errorf("typed body has the wrong signature: %T", raw)
+	}
+
+	// An object-level async rule is discoverable as an endpoint, so
+	// rulehttp serves it like any other.
+	eps := s.Endpoints()
+	if len(eps) != 1 || eps[0].Rule != "free" || eps[0].Path != "/v/span_free" {
+		t.Errorf("endpoints = %+v", eps)
+	}
+
+	// Builders stay immutable values: adding a rule must not mutate the
+	// builder it came from.
+	base := Struct("Span", F(fLo, Int[int]()))
+	withRule := base.Custom("x", func(_ context.Context, v Span) error { return nil })
+	if len(base.MustBuild().IR().Root.(*ir.ObjectNode).Rules) != 0 {
+		t.Error("Custom mutated the builder it was called on")
+	}
+	if len(withRule.MustBuild().IR().Root.(*ir.ObjectNode).Rules) != 1 {
+		t.Error("Custom did not attach the rule")
 	}
 }

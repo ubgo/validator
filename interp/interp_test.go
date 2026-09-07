@@ -863,3 +863,62 @@ func TestCoerceModes(t *testing.T) {
 		t.Errorf("lax then rule: %q", got)
 	}
 }
+
+// TestObjectLevelRulesRun pins the semantics of a rule whose subject is
+// the whole object: it sees every field, reports at the object's path, and
+// runs before the fields so fail-fast stops on it.
+func TestObjectLevelRulesRun(t *testing.T) {
+	type Span struct {
+		Lo, Hi int
+	}
+	fLo := vb.NewField("Lo", func(s Span) int { return s.Lo }).JSON("lo")
+	fHi := vb.NewField("Hi", func(s Span) int { return s.Hi }).JSON("hi")
+	s := vb.Struct("Span",
+		vb.F(fLo, vb.Int[int]().Min(1)),
+		vb.F(fHi, vb.Int[int]()),
+	).Custom("ordered", func(_ context.Context, v Span) error {
+		if v.Lo > v.Hi {
+			return errors.New("lo must not exceed hi")
+		}
+		return nil
+	}).MustBuild()
+
+	v, err := FromSchema(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	// It sees fields no single-field rule could combine.
+	errs := v.Run(ctx, &Span{Lo: 5, Hi: 1})
+	if errs.Len() != 1 {
+		t.Fatalf("issues = %+v", errs.Issues)
+	}
+	if errs.Issues[0].Path != "$" || errs.Issues[0].Code != verr.CodeCustom {
+		t.Errorf("issue = %+v, want the object path and a custom code", errs.Issues[0])
+	}
+	if errs.Issues[0].Message != "lo must not exceed hi" {
+		t.Errorf("message = %q; the function's own error text must survive", errs.Issues[0].Message)
+	}
+
+	// Satisfied, it says nothing.
+	if e := v.Run(ctx, &Span{Lo: 1, Hi: 5}); e.Len() != 0 {
+		t.Errorf("valid span reported %+v", e.Issues)
+	}
+
+	// It runs BEFORE the fields, so fail-fast reports the object rule
+	// rather than a field that also fails.
+	first := &verr.Errors{FailFast: true}
+	v.RunInto(ctx, &Span{Lo: 5, Hi: 1}, first) // Lo=5 passes Min(1); make it fail too
+	bad := &verr.Errors{FailFast: true}
+	v.RunInto(ctx, &Span{Lo: 0, Hi: -1}, bad)
+	if bad.Len() != 1 || bad.Issues[0].Path != "$" {
+		t.Errorf("fail-fast should stop on the object rule, got %+v", bad.Issues)
+	}
+	_ = first
+
+	// On map input it sees the decoded map, so the same rule works there.
+	if e := v.Run(ctx, map[string]any{"lo": 5.0, "hi": 1.0}); e.Len() == 0 {
+		t.Error("object rule did not run on map input")
+	}
+}

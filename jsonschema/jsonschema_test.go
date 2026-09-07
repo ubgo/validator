@@ -1,6 +1,7 @@
 package jsonschema
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -798,4 +799,49 @@ func TestPortableTail(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestObjectLevelRulesAreReported is the honesty check for the newest
+// rule position. A rule on the object as a whole has no JSON Schema form,
+// so the only acceptable behaviour is a manifest entry; vanishing is the
+// exact failure this package exists to prevent.
+func TestObjectLevelRulesAreReported(t *testing.T) {
+	type Span struct{ Lo int }
+	fLo := vb.NewField("Lo", func(s Span) int { return s.Lo }).JSON("lo")
+	s := vb.Struct("Span", vb.F(fLo, vb.Int[int]())).
+		Custom("ordered", func(_ context.Context, v Span) error { return nil }).
+		Async("free", "/v/free", func(_ context.Context, v Span) error { return nil }).
+		MustBuild()
+
+	res, err := Emit(s.IR())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Manifest.Portable() {
+		t.Fatal("object rules were dropped without a manifest entry")
+	}
+	byName := map[string]Entry{}
+	for _, e := range res.Manifest.Entries {
+		byName[e.Name] = e
+	}
+	custom, ok := byName["custom"]
+	if !ok {
+		t.Fatalf("no entry for the custom rule: %+v", res.Manifest.Entries)
+	}
+	if custom.Path != "$" || custom.Class != ClassOpaque || custom.Ref != "ordered" {
+		t.Errorf("custom entry = %+v", custom)
+	}
+	async, ok := byName["async"]
+	if !ok {
+		t.Fatal("no entry for the async rule")
+	}
+	if async.Path != "$" || async.Class != ClassServer || async.Endpoint != "/v/free" {
+		t.Errorf("async entry = %+v", async)
+	}
+
+	// The schema itself is unaffected: an object rule adds no keyword.
+	doc, _ := res.JSON()
+	if strings.Contains(string(doc), "ordered") || strings.Contains(string(doc), "free") {
+		t.Errorf("an opaque rule leaked into the schema:\n%s", doc)
+	}
 }

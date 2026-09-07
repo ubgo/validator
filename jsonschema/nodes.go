@@ -90,6 +90,11 @@ func (e *emitter) node(path string, n ir.TypeNode) *Object {
 	switch t := n.(type) {
 	case *ir.ObjectNode:
 		out = e.object(path, t)
+		// Object-level rules go through the same path as any other rule,
+		// so a custom or async one lands in the manifest rather than
+		// vanishing. Emitting the object first means e.obj is set, which
+		// object rules do not need but the shared helper assumes.
+		e.rules(path, out, t.Rules)
 	case *ir.StringNode:
 		out = NewObject().Set(kwType, tyString)
 		e.rules(path, out, t.Rules)

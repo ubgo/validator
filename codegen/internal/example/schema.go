@@ -133,6 +133,15 @@ var OrderSchema = vb.Struct("Order",
 	vb.F(fCard, vb.String().CreditCard()).Optional(),
 	vb.F(fLat, vb.Float[float64]().Latitude()),
 ).
+	// An object-level rule: its subject is the whole order, not a field.
+	// No gate can express this, because a gate decides whether other rules
+	// apply and reports nothing itself.
+	Custom("order_consistent", func(_ context.Context, o Order) error {
+		if o.Qty > 50 && o.Type == "offline" {
+			return errors.New("bulk orders must be online")
+		}
+		return nil
+	}).
 	Extra(ir.ExtraForbid).
 	Gate(
 		vb.When(vb.Eq(fType, "online"), []ir.TargetRule{vb.On(fURL, ir.MinLength(1))}, []ir.TargetRule{vb.On(fVenue, ir.MinLength(1))}),

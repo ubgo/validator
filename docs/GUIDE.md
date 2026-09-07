@@ -7,7 +7,7 @@ The files this guide shows live in `examples/guide/` and are compiled by the bui
 1. [What it is, in one picture](#1-what-it-is-in-one-picture)
 2. [Quickstart in five steps](#2-quickstart-in-five-steps)
 3. [The workflow, end to end](#3-the-workflow-end-to-end)
-4. [Authoring rules: every feature](#4-authoring-rules-every-feature) (types, fields, nesting, gates, variants, map input, presence, results, custom and async, messages, unknown keys, foreign IR, expressions)
+4. [Authoring rules: every feature](#4-authoring-rules-every-feature) (types, fields, nesting, gates, variants, map input, presence, results, custom and async, messages, unknown keys, foreign IR, struct-level rules, expressions)
 5. [Exporting: JSON Schema, manifest, TypeScript](#5-exporting-json-schema-manifest-typescript)
 6. [The frontend runtime](#6-the-frontend-runtime) (and 6.1: how the pieces fit, with diagrams)
 7. [Production: the generated executor](#7-production-the-generated-executor)
@@ -60,7 +60,7 @@ go get github.com/ubgo/validator
 go install github.com/ubgo/validator/cli/cmd/validatorctl@latest
 ```
 
-The library itself has no third-party dependencies. The one optional extra is the expression engine, a separate module you add only if you use it (4.13).
+The library itself has no third-party dependencies. The one optional extra is the expression engine, a separate module you add only if you use it (4.14).
 
 ### Step 2: have a struct
 
@@ -426,7 +426,7 @@ Conditions: `vb.Eq(ref, v)`, `vb.Cmp(ref, ir.OpGt, v)`, `vb.In(ref, a, b)`, `vb.
 )
 ```
 
-In JSON Schema these become `if`/`then`/`else` blocks, which Ajv runs natively. Arithmetic between fields, `end - start < 30 days`, is the one thing this vocabulary cannot state; that is what expressions are for, in 4.13 below.
+In JSON Schema these become `if`/`then`/`else` blocks, which Ajv runs natively. Arithmetic between fields, `end - start < 30 days`, is the one thing this vocabulary cannot state; that is what expressions are for, in 4.14 below.
 
 A condition can also be a Go predicate, by name. The gate says `ir.CustomCond("vip")`; a registry supplies the function. The predicate is Go-only, so the manifest lists it and the browser skips the gate.
 
@@ -805,7 +805,31 @@ func main() {
 
 The same catalog file is the TypeScript runtime's `catalog` option, so both sides render one wording.
 
-### 4.11 Unknown keys
+### 4.11 Rules on the whole struct
+
+Every rule so far belongs to a field. Some checks do not: "these dates and this rate are consistent with each other", "this combination is not already taken". A gate cannot express them, because a gate decides whether *other* rules apply and reports nothing of its own.
+
+```go
+var Schema = vb.Struct("Booking",
+	vb.F(BookingFields.Start, vb.Time()),
+	vb.F(BookingFields.End, vb.Time()),
+	vb.F(BookingFields.Rate, vb.Float[float64]().Min(0)),
+).Custom("priced_correctly", func(_ context.Context, b Booking) error {
+	if b.End.Sub(b.Start) > 30*24*time.Hour && b.Rate == 0 {
+		return errors.New("a long stay needs a negotiated rate")
+	}
+	return nil
+}).Async("room_free", "/v/room_free", func(ctx context.Context, b Booking) error {
+	// reads several fields, and the database
+	return nil
+}).MustBuild()
+```
+
+The function receives the whole value. Issues are reported at the object's path, `$` at the root or `$.billing` for a nested one, and object rules run before the fields so a fail-fast run stops on the whole-value check rather than on some field.
+
+They behave like any other custom or async rule everywhere else: `Custom` is Go-only and lands in the manifest as `opaque`; `Async` is served by `rulehttp` at its endpoint and the browser round-trips to it; generated code runs both; and neither can be expressed in JSON Schema, so both are reported rather than dropped.
+
+### 4.12 Unknown keys
 
 On map input, keys the schema does not declare are ignored by default. `.Extra(ir.ExtraForbid)` on the struct builder makes each one an `unknown_key` issue at its own path (`$.typo`); `ir.ExtraAllow` states explicitly that they are fine. Struct input has no unknown keys, because the decoder already dropped them; the policy is exported to JSON Schema as `additionalProperties`, so the browser enforces it too.
 
@@ -844,7 +868,7 @@ func main() {
 }
 ```
 
-### 4.12 Hand-written or foreign IR
+### 4.13 Hand-written or foreign IR
 
 The IR is JSON, so it can come from anywhere: a file, another language, a database. Decode it into `ir.Schema`, check it, run it. Names of custom and async rules must be resolved by a registry you pass in.
 
@@ -878,7 +902,7 @@ func main() {
 	// The document only names custom and async rules; a registry supplies the
 	// bodies. Here the vb schema that produced the file is the registry.
 	// Refuses unresolved custom names, and expressions unless you also pass
-	// interp.WithExpr (see 4.13).
+	// interp.WithExpr (see 4.14).
 	v, err := interp.New(&doc, interp.WithFuncs(signup.Schema))
 	if err != nil {
 		log.Fatal(err)
@@ -889,7 +913,7 @@ func main() {
 
 `validatorctl ir check file.json` runs the same check from the shell, and `validatorctl ir contract` (`jsonschema.Contract()` in Go) prints the JSON Schema the file must conform to. `schema.Getter("Email")` returns the accessor for a root field by Go name, for tools that map issues back to struct fields.
 
-### 4.13 Expressions: arithmetic and aggregation
+### 4.14 Expressions: arithmetic and aggregation
 
 Everything above compares a field to a literal or to another field. What it cannot do is arithmetic. "The stay is longer than a week" is `end - start`, not a comparison, and neither is "the total equals the sum of the line prices". For those the IR carries a [CEL](https://cel.dev) expression, which is still data, still serializable, and still not a closure.
 
@@ -1300,7 +1324,7 @@ func main() {
 }
 ```
 
-The third argument is the registry that resolves custom and async rules by name; your `vb.Schema` is one, and any type with `Func(name) (vb.Func, bool)` works. A registry that also offers `TypedFunc(name) (any, bool)` returning the original typed function lets the generated code call it without boxing (your `vb.Schema` does). Generated code and the interpreter are conformance-tested to produce identical issues, so you can switch between them without behavior change. The parts a generator cannot type statically, a discriminated union on an `any` field or a union with collection variants, run the interpreter on that subtree at the same path. Gates whose condition is an expression take the same route, so `gen` refuses nothing; see 4.13.
+The third argument is the registry that resolves custom and async rules by name; your `vb.Schema` is one, and any type with `Func(name) (vb.Func, bool)` works. A registry that also offers `TypedFunc(name) (any, bool)` returning the original typed function lets the generated code call it without boxing (your `vb.Schema` does). Generated code and the interpreter are conformance-tested to produce identical issues, so you can switch between them without behavior change. The parts a generator cannot type statically, a discriminated union on an `any` field or a union with collection variants, run the interpreter on that subtree at the same path. Gates whose condition is an expression take the same route, so `gen` refuses nothing; see 4.14.
 
 On the repository's own fixture, which is deliberately heavy (a union, a discriminated union, transforms, two custom rules, a gate predicate):
 
@@ -1359,7 +1383,7 @@ The migration reads `validate:"..."` tags on the root struct and every struct it
 
 From Go instead of the shell: `tags.Migrate(tags.Options{Dir, Type})` returns the IR, the migration order and `Unsupported` entries; `tags.Builder(schema, types, tags.BuilderOptions{Package})` renders the `vb` source; `accessors.Generate(accessors.Options{Dir})` is the `fields` command.
 
-Honesty rules the migration follows: a field without `required` becomes `Optional`; `min`/`max`/`len` on strings and collections are lengths, on numbers bounds; `gt`/`lt` on lengths become inclusive by one; `oneof` becomes `Enum`; `eqfield` and friends on time fields become `After`/`Before`; on anything else they are reported, and an expression (4.13) is usually the answer.
+Honesty rules the migration follows: a field without `required` becomes `Optional`; `min`/`max`/`len` on strings and collections are lengths, on numbers bounds; `gt`/`lt` on lengths become inclusive by one; `oneof` becomes `Enum`; `eqfield` and friends on time fields become `After`/`Before`; on anything else they are reported, and an expression (4.14) is usually the answer.
 
 ## 9. CLI reference
 
@@ -1381,7 +1405,7 @@ Every command supports `--json` for a machine-readable envelope and exits non-ze
 | Feature | Go | Browser | Reported as |
 |---|---|---|---|
 | Formats, lengths, bounds, enums, patterns, nesting, arrays, maps, conditions, gates, discriminated unions | runs | runs (JSON Schema) | nothing to report |
-| `.Custom(fn)` | runs | warns once, server enforces | manifest `opaque` |
+| `.Custom(fn)` on a field or the struct | runs | warns once, server enforces | manifest `opaque` |
 | `.Async(name, endpoint, fn)` | runs | debounced round-trip | manifest `server` |
 | `After` / `Before` between fields | runs | **runs**, from the condition carried in the manifest | manifest `cel`, carrying `cond` |
 | Gates keyed on a field-to-field comparison | runs | **runs**, condition here plus branch schema in Ajv | manifest `cel`, carrying `cond` and `then`/`else` |
@@ -1413,7 +1437,7 @@ This covers `after`, `before`, and any gate whose condition is built from compar
 
 **Why not just export Zod?** Zod is on the roadmap as an eject target. JSON Schema was chosen first because it is what OpenAPI, Ajv, and most other languages already consume, and Standard Schema makes the Ajv-backed validator usable wherever Zod would be.
 
-**Do I need the CEL module?** Only for arithmetic or aggregation across fields. Comparing two fields, including time ordering, is a typed condition and needs nothing extra, and those run in the browser too. See 4.13.
+**Do I need the CEL module?** Only for arithmetic or aggregation across fields. Comparing two fields, including time ordering, is a typed condition and needs nothing extra, and those run in the browser too. See 4.14.
 
 **What about struct tags?** They are a migration input only. Tags are opaque strings that cannot be type-checked or exported faithfully, which is the problem this library exists to remove.
 

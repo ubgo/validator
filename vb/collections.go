@@ -45,6 +45,39 @@ func (t *ObjectType[S]) Extra(p ir.ExtraPolicy) *ObjectType[S] {
 }
 
 // Gate appends object-level conditional logic.
+// Custom attaches a rule to the object as a whole: the function receives
+// the entire value, not one field. This is the shape a check takes when
+// its subject is the struct — "these dates and this rate are consistent
+// with each other" — which a gate cannot express, because a gate decides
+// whether other rules apply and reports nothing itself.
+//
+// Go-only, like every custom rule: the IR records the name, the manifest
+// marks it opaque, and the browser is told it exists and cannot run it.
+func (t *ObjectType[S]) Custom(name string, fn func(context.Context, S) error) *ObjectType[S] {
+	c := t.clone()
+	c.node.Rules = append(append([]ir.Rule{}, t.node.Rules...), ir.Custom(name))
+	c.reg = register(t.reg, name, fn)
+	return c
+}
+
+// Async attaches a server-backed rule to the object as a whole: a check
+// that needs the database and reads more than one field, "this room is
+// free for these dates". endpoint may be empty, in which case the
+// generator derives it from the name.
+func (t *ObjectType[S]) Async(name, endpoint string, fn func(context.Context, S) error) *ObjectType[S] {
+	c := t.clone()
+	c.node.Rules = append(append([]ir.Rule{}, t.node.Rules...), ir.Async(name, endpoint))
+	c.reg = register(t.reg, name, fn)
+	return c
+}
+
+// clone copies the object node so a builder stays an immutable value; the
+// field slice is shared because fields are never mutated in place.
+func (t *ObjectType[S]) clone() *ObjectType[S] {
+	node := *t.node
+	return &ObjectType[S]{node: &node, reg: t.reg}
+}
+
 func (t *ObjectType[S]) Gate(gates ...ir.GatedRules) *ObjectType[S] {
 	c := *t
 	n := *t.node

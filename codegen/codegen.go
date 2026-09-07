@@ -343,6 +343,14 @@ func (g *gen) emitValidator(typeName string, obj *ir.ObjectNode) {
 // emitObjectBody emits field checks and gates for an object whose value is
 // reachable through pointer expression pv.
 func (g *gen) emitObjectBody(obj *ir.ObjectNode, pv string, fields map[string]field, pathVar string) {
+	// Object-level rules first, matching the interpreter's order so
+	// fail-fast reports the same first issue in both executors. The value
+	// passed is the struct itself, not a field, which is the whole point
+	// of an object rule; pv is a pointer, so it is dereferenced.
+	if len(obj.Rules) > 0 {
+		g.emitRules(obj.Rules, "*"+pv, "", pathVar, pv, fields)
+		g.stopCheck()
+	}
 	for i := range obj.Fields {
 		f := &obj.Fields[i]
 		gf, ok := fields[f.Name]

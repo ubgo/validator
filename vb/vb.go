@@ -277,28 +277,67 @@ func Struct[T any](name string, fields ...Field[T]) *StructBuilder[T] {
 // Source records the fully qualified Go type the schema describes, for
 // tracing generated artifacts back to their origin.
 func (b *StructBuilder[T]) Source(src string) *StructBuilder[T] {
-	b.meta.Source = src
-	return b
+	c := b.clone()
+	c.meta.Source = src
+	return c
 }
 
 // Generator records which tool produced the schema.
 func (b *StructBuilder[T]) Generator(g string) *StructBuilder[T] {
-	b.meta.Generator = g
-	return b
+	c := b.clone()
+	c.meta.Generator = g
+	return c
+}
+
+// clone copies the builder so every method below is a value operation,
+// the same contract the type builders keep. Without it two schemas
+// derived from one base would share state, and the second would silently
+// inherit the first's gates.
+func (b *StructBuilder[T]) clone() *StructBuilder[T] {
+	c := *b
+	return &c
 }
 
 // Extra sets the unknown-key policy on the root object.
 func (b *StructBuilder[T]) Extra(p ir.ExtraPolicy) *StructBuilder[T] {
-	b.obj = b.obj.Extra(p)
-	return b
+	c := b.clone()
+	c.obj = b.obj.Extra(p)
+	return c
 }
 
 // Gate appends object-level conditional logic (see [When], [Requires],
 // [Group]). Fields are named through refs so a rename is a compile error;
 // Build still verifies every target exists.
 func (b *StructBuilder[T]) Gate(gates ...ir.GatedRules) *StructBuilder[T] {
-	b.obj = b.obj.Gate(gates...)
-	return b
+	c := b.clone()
+	c.obj = b.obj.Gate(gates...)
+	return c
+}
+
+// Custom attaches a rule to the whole struct: the function receives the
+// entire value. Use it when the check has no single owning field, which a
+// gate cannot express because a gate only decides whether other rules
+// apply.
+//
+//	vb.Struct("Booking", fields...).
+//		Custom("dates_consistent", func(_ context.Context, b Booking) error {
+//			if b.End.Sub(b.Start) > 30*24*time.Hour {
+//				return errors.New("a booking may not exceed 30 days")
+//			}
+//			return nil
+//		})
+func (b *StructBuilder[T]) Custom(name string, fn func(context.Context, T) error) *StructBuilder[T] {
+	c := b.clone()
+	c.obj = b.obj.Custom(name, fn)
+	return c
+}
+
+// Async attaches a server-backed rule to the whole struct, for a check
+// that needs the database and reads more than one field.
+func (b *StructBuilder[T]) Async(name, endpoint string, fn func(context.Context, T) error) *StructBuilder[T] {
+	c := b.clone()
+	c.obj = b.obj.Async(name, endpoint, fn)
+	return c
 }
 
 // Build finalizes the schema. It returns an error for the mistakes a builder

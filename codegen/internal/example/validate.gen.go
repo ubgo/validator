@@ -20,16 +20,16 @@ var (
 // with the same issues a full interpreter run would produce.
 var (
 	// discriminated union on Go type any
-	fallback62 = rt.MustSchema("{\"version\":\"ubgo.validator.ir/v1\",\"root\":{\"kind\":\"oneof\",\"discriminator\":\"kind\",\"cases\":{\"a\":{\"kind\":\"object\",\"fields\":[{\"name\":\"Kind\",\"json\":\"kind\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"const\",\"params\":{\"value\":\"a\"}}]}},{\"name\":\"URL\",\"json\":\"url\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"url\"}]}}]},\"b\":{\"kind\":\"object\",\"fields\":[{\"name\":\"Kind\",\"json\":\"kind\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"const\",\"params\":{\"value\":\"b\"}}]}}]}}},\"defs\":{\"Address\":{\"kind\":\"object\",\"fields\":[{\"name\":\"Street\",\"json\":\"street\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"minLength\",\"params\":{\"value\":1}}]}},{\"name\":\"Zip\",\"json\":\"zip\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"pattern\",\"params\":{\"regex\":\"^[0-9]{5}$\"}}]},\"optional\":true}]}}}")
+	fallback64 = rt.MustSchema("{\"version\":\"ubgo.validator.ir/v1\",\"root\":{\"kind\":\"oneof\",\"discriminator\":\"kind\",\"cases\":{\"a\":{\"kind\":\"object\",\"fields\":[{\"name\":\"Kind\",\"json\":\"kind\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"const\",\"params\":{\"value\":\"a\"}}]}},{\"name\":\"URL\",\"json\":\"url\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"url\"}]}}]},\"b\":{\"kind\":\"object\",\"fields\":[{\"name\":\"Kind\",\"json\":\"kind\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"const\",\"params\":{\"value\":\"b\"}}]}}]}}},\"defs\":{\"Address\":{\"kind\":\"object\",\"fields\":[{\"name\":\"Street\",\"json\":\"street\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"minLength\",\"params\":{\"value\":1}}]}},{\"name\":\"Zip\",\"json\":\"zip\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"pattern\",\"params\":{\"regex\":\"^[0-9]{5}$\"}}]},\"optional\":true}]}}}")
 	// union with a array variant
-	fallback71 = rt.MustSchema("{\"version\":\"ubgo.validator.ir/v1\",\"root\":{\"kind\":\"union\",\"variants\":[{\"kind\":\"string\",\"rules\":[{\"kind\":\"minLength\",\"params\":{\"value\":2}}]},{\"kind\":\"array\",\"elem\":{\"kind\":\"int\",\"rules\":[{\"kind\":\"min\",\"params\":{\"value\":1}}]},\"rules\":[{\"kind\":\"minItems\",\"params\":{\"value\":1}}]}]},\"defs\":{\"Address\":{\"kind\":\"object\",\"fields\":[{\"name\":\"Street\",\"json\":\"street\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"minLength\",\"params\":{\"value\":1}}]}},{\"name\":\"Zip\",\"json\":\"zip\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"pattern\",\"params\":{\"regex\":\"^[0-9]{5}$\"}}]},\"optional\":true}]}}}")
+	fallback73 = rt.MustSchema("{\"version\":\"ubgo.validator.ir/v1\",\"root\":{\"kind\":\"union\",\"variants\":[{\"kind\":\"string\",\"rules\":[{\"kind\":\"minLength\",\"params\":{\"value\":2}}]},{\"kind\":\"array\",\"elem\":{\"kind\":\"int\",\"rules\":[{\"kind\":\"min\",\"params\":{\"value\":1}}]},\"rules\":[{\"kind\":\"minItems\",\"params\":{\"value\":1}}]}]},\"defs\":{\"Address\":{\"kind\":\"object\",\"fields\":[{\"name\":\"Street\",\"json\":\"street\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"minLength\",\"params\":{\"value\":1}}]}},{\"name\":\"Zip\",\"json\":\"zip\",\"type\":{\"kind\":\"string\",\"rules\":[{\"kind\":\"pattern\",\"params\":{\"regex\":\"^[0-9]{5}$\"}}]},\"optional\":true}]}}}")
 )
 
 // Patterns are compiled once at package init; ir.Check already proved
 // they parse, so MustCompile cannot panic here.
 var (
-	pattern69 = regexp.MustCompile("^SKU-")
-	pattern88 = regexp.MustCompile("^[0-9]{5}$")
+	pattern71 = regexp.MustCompile("^SKU-")
+	pattern90 = regexp.MustCompile("^[0-9]{5}$")
 )
 
 // ValidateOrder validates v against the Order schema. Generated; the semantics are
@@ -52,24 +52,32 @@ func ValidateOrderInto(ctx context.Context, v *Order, reg rt.Registry, errs *ver
 
 func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path, errs *verr.Errors) {
 	_, _, _ = ctx, reg, path
+	if err1 := rt.CallT(ctx, reg, "order_consistent", *v); err1 != nil {
+		params2 := map[string]any{"ref": "order_consistent"}
+		params2["error"] = err1.Error()
+		rt.Fail(errs, "custom", path.String(), "{error}", "custom", params2)
+	}
+	if errs.Stopped() {
+		return
+	}
 	{
-		p1 := path.Field(".email")
-		_ = p1
+		p3 := path.Field(".email")
+		_ = p3
 		if v.Email == "" {
-			rt.Required(errs, p1.String())
+			rt.Required(errs, p3.String())
 		} else {
 			if !(rt.Email(v.Email)) {
-				rt.Fail(errs, "email", p1.String(), "must be a valid email address", "email", map[string]any{})
+				rt.Fail(errs, "email", p3.String(), "must be a valid email address", "email", map[string]any{})
 			}
-			if err2 := rt.CallT(ctx, reg, "no_temp", v.Email); err2 != nil {
-				params3 := map[string]any{"ref": "no_temp"}
-				params3["error"] = err2.Error()
-				rt.Fail(errs, "custom", p1.String(), "{error}", "custom", params3)
-			}
-			if err4 := rt.CallT(ctx, reg, "unique_email", v.Email); err4 != nil {
-				params5 := map[string]any{"endpoint": "/v/unique_email", "ref": "unique_email"}
+			if err4 := rt.CallT(ctx, reg, "no_temp", v.Email); err4 != nil {
+				params5 := map[string]any{"ref": "no_temp"}
 				params5["error"] = err4.Error()
-				rt.Fail(errs, "custom", p1.String(), "{error}", "async", params5)
+				rt.Fail(errs, "custom", p3.String(), "{error}", "custom", params5)
+			}
+			if err6 := rt.CallT(ctx, reg, "unique_email", v.Email); err6 != nil {
+				params7 := map[string]any{"endpoint": "/v/unique_email", "ref": "unique_email"}
+				params7["error"] = err6.Error()
+				rt.Fail(errs, "custom", p3.String(), "{error}", "async", params7)
 			}
 		}
 	}
@@ -77,62 +85,19 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p6 := path.Field(".qty")
-		_ = p6
-		if false {
-			rt.Required(errs, p6.String())
-		} else {
-			if !(float64(v.Qty) >= float64(float64(1))) {
-				rt.Fail(errs, "min", p6.String(), "must be at least {value}", "min", map[string]any{"value": float64(1)})
-			}
-			if !(float64(v.Qty) <= float64(float64(100))) {
-				rt.Fail(errs, "max", p6.String(), "must be at most {value}", "max", map[string]any{"value": float64(100)})
-			}
-			if !(rt.MultipleOf(float64(v.Qty), float64(float64(1)))) {
-				rt.Fail(errs, "qty_step", p6.String(), "whole units only", "multipleOf", map[string]any{"value": float64(1)})
-			}
-		}
-	}
-	if errs.Stopped() {
-		return
-	}
-	{
-		p7 := path.Field(".weight")
-		_ = p7
-		if false {
-			rt.Required(errs, p7.String())
-		} else {
-			if !(float64(v.Weight) > float64(float64(0))) {
-				rt.Fail(errs, "gt", p7.String(), "must be greater than {value}", "gt", map[string]any{"value": float64(0)})
-			}
-			if !(float64(v.Weight) <= float64(float64(50))) {
-				rt.Fail(errs, "lte", p7.String(), "must be at most {value}", "lte", map[string]any{"value": float64(50)})
-			}
-		}
-	}
-	if errs.Stopped() {
-		return
-	}
-	{
-		p8 := path.Field(".rush")
+		p8 := path.Field(".qty")
 		_ = p8
 		if false {
 			rt.Required(errs, p8.String())
-		}
-	}
-	if errs.Stopped() {
-		return
-	}
-	{
-		p9 := path.Field(".note")
-		_ = p9
-		if v.Note == nil {
 		} else {
-			if !(rt.RuneLen((*v.Note)) >= int(int(2))) {
-				rt.Fail(errs, "min_length", p9.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(2)})
+			if !(float64(v.Qty) >= float64(float64(1))) {
+				rt.Fail(errs, "min", p8.String(), "must be at least {value}", "min", map[string]any{"value": float64(1)})
 			}
-			if !(rt.RuneLen((*v.Note)) <= int(int(10))) {
-				rt.Fail(errs, "max_length", p9.String(), "must be at most {value} characters", "maxLength", map[string]any{"value": int(10)})
+			if !(float64(v.Qty) <= float64(float64(100))) {
+				rt.Fail(errs, "max", p8.String(), "must be at most {value}", "max", map[string]any{"value": float64(100)})
+			}
+			if !(rt.MultipleOf(float64(v.Qty), float64(float64(1)))) {
+				rt.Fail(errs, "qty_step", p8.String(), "whole units only", "multipleOf", map[string]any{"value": float64(1)})
 			}
 		}
 	}
@@ -140,9 +105,26 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p10 := path.Field(".placed")
+		p9 := path.Field(".weight")
+		_ = p9
+		if false {
+			rt.Required(errs, p9.String())
+		} else {
+			if !(float64(v.Weight) > float64(float64(0))) {
+				rt.Fail(errs, "gt", p9.String(), "must be greater than {value}", "gt", map[string]any{"value": float64(0)})
+			}
+			if !(float64(v.Weight) <= float64(float64(50))) {
+				rt.Fail(errs, "lte", p9.String(), "must be at most {value}", "lte", map[string]any{"value": float64(50)})
+			}
+		}
+	}
+	if errs.Stopped() {
+		return
+	}
+	{
+		p10 := path.Field(".rush")
 		_ = p10
-		if v.Placed.IsZero() {
+		if false {
 			rt.Required(errs, p10.String())
 		}
 	}
@@ -150,12 +132,38 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p11 := path.Field(".ship")
+		p11 := path.Field(".note")
 		_ = p11
+		if v.Note == nil {
+		} else {
+			if !(rt.RuneLen((*v.Note)) >= int(int(2))) {
+				rt.Fail(errs, "min_length", p11.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(2)})
+			}
+			if !(rt.RuneLen((*v.Note)) <= int(int(10))) {
+				rt.Fail(errs, "max_length", p11.String(), "must be at most {value} characters", "maxLength", map[string]any{"value": int(10)})
+			}
+		}
+	}
+	if errs.Stopped() {
+		return
+	}
+	{
+		p12 := path.Field(".placed")
+		_ = p12
+		if v.Placed.IsZero() {
+			rt.Required(errs, p12.String())
+		}
+	}
+	if errs.Stopped() {
+		return
+	}
+	{
+		p13 := path.Field(".ship")
+		_ = p13
 		if v.Ship == nil {
 		} else {
 			if !(v.Placed.IsZero() || (*v.Ship).After(v.Placed)) {
-				rt.Fail(errs, "after", p11.String(), "must be after {field}", "after", map[string]any{"field": "Placed"})
+				rt.Fail(errs, "after", p13.String(), "must be after {field}", "after", map[string]any{"field": "Placed"})
 			}
 		}
 	}
@@ -163,16 +171,16 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p12 := path.Field(".window")
-		_ = p12
+		p14 := path.Field(".window")
+		_ = p14
 		if false {
-			rt.Required(errs, p12.String())
+			rt.Required(errs, p14.String())
 		} else {
 			if !(float64(v.Window) > float64(float64(0))) {
-				rt.Fail(errs, "gt", p12.String(), "must be greater than {value}", "gt", map[string]any{"value": float64(0)})
+				rt.Fail(errs, "gt", p14.String(), "must be greater than {value}", "gt", map[string]any{"value": float64(0)})
 			}
 			if !(float64(v.Window) < float64(float64(8.64e+13))) {
-				rt.Fail(errs, "lt", p12.String(), "must be less than {value}", "lt", map[string]any{"value": float64(8.64e+13)})
+				rt.Fail(errs, "lt", p14.String(), "must be less than {value}", "lt", map[string]any{"value": float64(8.64e+13)})
 			}
 		}
 	}
@@ -180,28 +188,28 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p13 := path.Field(".tags")
-		_ = p13
+		p15 := path.Field(".tags")
+		_ = p15
 		if v.Tags == nil {
-			rt.Required(errs, p13.String())
+			rt.Required(errs, p15.String())
 		} else {
 			if !(len(v.Tags) >= int(int(1))) {
-				rt.Fail(errs, "min_items", p13.String(), "must have at least {value} items", "minItems", map[string]any{"value": int(1)})
+				rt.Fail(errs, "min_items", p15.String(), "must have at least {value} items", "minItems", map[string]any{"value": int(1)})
 			}
 			if !(len(v.Tags) <= int(int(3))) {
-				rt.Fail(errs, "max_items", p13.String(), "must have at most {value} items", "maxItems", map[string]any{"value": int(3)})
+				rt.Fail(errs, "max_items", p15.String(), "must have at most {value} items", "maxItems", map[string]any{"value": int(3)})
 			}
 			if !(rt.UniqueOf(v.Tags)) {
-				rt.Fail(errs, "unique", p13.String(), "items must be unique", "unique", map[string]any{})
+				rt.Fail(errs, "unique", p15.String(), "items must be unique", "unique", map[string]any{})
 			}
-			for i14 := range v.Tags {
+			for i16 := range v.Tags {
 				if errs.Stopped() {
 					return
 				}
-				p15 := p13.Index(i14)
-				_ = p15
-				if !(v.Tags[i14] == "a" || v.Tags[i14] == "b" || v.Tags[i14] == "c") {
-					rt.Fail(errs, "enum", p15.String(), "must be one of {values}", "enum", map[string]any{"values": []any{"a", "b", "c"}})
+				p17 := p15.Index(i16)
+				_ = p17
+				if !(v.Tags[i16] == "a" || v.Tags[i16] == "b" || v.Tags[i16] == "c") {
+					rt.Fail(errs, "enum", p17.String(), "must be one of {values}", "enum", map[string]any{"values": []any{"a", "b", "c"}})
 				}
 			}
 		}
@@ -210,24 +218,24 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p16 := path.Field(".scores")
-		_ = p16
+		p18 := path.Field(".scores")
+		_ = p18
 		if v.Scores == nil {
 		} else {
 			if !(rt.UniqueOf(v.Scores)) {
-				rt.Fail(errs, "unique", p16.String(), "items must be unique", "unique", map[string]any{})
+				rt.Fail(errs, "unique", p18.String(), "items must be unique", "unique", map[string]any{})
 			}
-			for i17 := range v.Scores {
+			for i19 := range v.Scores {
 				if errs.Stopped() {
 					return
 				}
-				p18 := p16.Index(i17)
-				_ = p18
-				if !(float64(v.Scores[i17]) >= float64(float64(0))) {
-					rt.Fail(errs, "gte", p18.String(), "must be at least {value}", "gte", map[string]any{"value": float64(0)})
+				p20 := p18.Index(i19)
+				_ = p20
+				if !(float64(v.Scores[i19]) >= float64(float64(0))) {
+					rt.Fail(errs, "gte", p20.String(), "must be at least {value}", "gte", map[string]any{"value": float64(0)})
 				}
-				if !(float64(v.Scores[i17]) <= float64(float64(10))) {
-					rt.Fail(errs, "lte", p18.String(), "must be at most {value}", "lte", map[string]any{"value": float64(10)})
+				if !(float64(v.Scores[i19]) <= float64(float64(10))) {
+					rt.Fail(errs, "lte", p20.String(), "must be at most {value}", "lte", map[string]any{"value": float64(10)})
 				}
 			}
 		}
@@ -236,24 +244,24 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p19 := path.Field(".meta")
-		_ = p19
+		p21 := path.Field(".meta")
+		_ = p21
 		if v.Meta == nil {
 		} else {
 			if !(len(v.Meta) <= int(int(2))) {
-				rt.Fail(errs, "max_items", p19.String(), "must have at most {value} items", "maxItems", map[string]any{"value": int(2)})
+				rt.Fail(errs, "max_items", p21.String(), "must have at most {value} items", "maxItems", map[string]any{"value": int(2)})
 			}
-			for k20, e21 := range v.Meta {
+			for k22, e23 := range v.Meta {
 				if errs.Stopped() {
 					return
 				}
-				p22 := p19.KeyStr(k20)
-				_ = p22
-				if !(rt.RuneLen(k20) <= int(int(3))) {
-					rt.Fail(errs, "max_length", p22.String(), "must be at most {value} characters", "maxLength", map[string]any{"value": int(3)})
+				p24 := p21.KeyStr(k22)
+				_ = p24
+				if !(rt.RuneLen(k22) <= int(int(3))) {
+					rt.Fail(errs, "max_length", p24.String(), "must be at most {value} characters", "maxLength", map[string]any{"value": int(3)})
 				}
-				if !(rt.RuneLen(e21) >= int(int(1))) {
-					rt.Fail(errs, "min_length", p22.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
+				if !(rt.RuneLen(e23) >= int(int(1))) {
+					rt.Fail(errs, "min_length", p24.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
 				}
 			}
 		}
@@ -262,24 +270,12 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p23 := path.Field(".billing")
-		_ = p23
-		if false {
-			rt.Required(errs, p23.String())
-		} else {
-			r24 := v.Billing
-			validateAddress(ctx, &r24, reg, p23, errs)
-		}
-	}
-	if errs.Stopped() {
-		return
-	}
-	{
-		p25 := path.Field(".shipping")
+		p25 := path.Field(".billing")
 		_ = p25
-		if v.Shipping == nil {
+		if false {
+			rt.Required(errs, p25.String())
 		} else {
-			r26 := (*v.Shipping)
+			r26 := v.Billing
 			validateAddress(ctx, &r26, reg, p25, errs)
 		}
 	}
@@ -287,30 +283,42 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p27 := path.Field(".lines")
+		p27 := path.Field(".shipping")
 		_ = p27
+		if v.Shipping == nil {
+		} else {
+			r28 := (*v.Shipping)
+			validateAddress(ctx, &r28, reg, p27, errs)
+		}
+	}
+	if errs.Stopped() {
+		return
+	}
+	{
+		p29 := path.Field(".lines")
+		_ = p29
 		if v.Lines == nil {
-			rt.Required(errs, p27.String())
+			rt.Required(errs, p29.String())
 		} else {
 			if !(len(v.Lines) >= int(int(1))) {
-				rt.Fail(errs, "min_items", p27.String(), "must have at least {value} items", "minItems", map[string]any{"value": int(1)})
+				rt.Fail(errs, "min_items", p29.String(), "must have at least {value} items", "minItems", map[string]any{"value": int(1)})
 			}
-			for i28 := range v.Lines {
+			for i30 := range v.Lines {
 				if errs.Stopped() {
 					return
 				}
-				p29 := p27.Index(i28)
-				_ = p29
-				o30 := v.Lines[i28]
+				p31 := p29.Index(i30)
+				_ = p31
+				o32 := v.Lines[i30]
 				{
 					{
-						p31 := p29.Field(".sku")
-						_ = p31
-						if (&o30).Sku == "" {
-							rt.Required(errs, p31.String())
+						p33 := p31.Field(".sku")
+						_ = p33
+						if (&o32).Sku == "" {
+							rt.Required(errs, p33.String())
 						} else {
-							if !(rt.UUID((&o30).Sku)) {
-								rt.Fail(errs, "uuid", p31.String(), "must be a valid UUID", "uuid", map[string]any{})
+							if !(rt.UUID((&o32).Sku)) {
+								rt.Fail(errs, "uuid", p33.String(), "must be a valid UUID", "uuid", map[string]any{})
 							}
 						}
 					}
@@ -318,13 +326,13 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 						return
 					}
 					{
-						p32 := p29.Field(".qty")
-						_ = p32
+						p34 := p31.Field(".qty")
+						_ = p34
 						if false {
-							rt.Required(errs, p32.String())
+							rt.Required(errs, p34.String())
 						} else {
-							if !(float64((&o30).Qty) > float64(float64(0))) {
-								rt.Fail(errs, "gt", p32.String(), "must be greater than {value}", "gt", map[string]any{"value": float64(0)})
+							if !(float64((&o32).Qty) > float64(float64(0))) {
+								rt.Fail(errs, "gt", p34.String(), "must be greater than {value}", "gt", map[string]any{"value": float64(0)})
 							}
 						}
 					}
@@ -339,12 +347,12 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p33 := path.Field(".raw")
-		_ = p33
+		p35 := path.Field(".raw")
+		_ = p35
 		if v.Raw == nil {
 		} else {
 			if !(len(v.Raw) <= int(int(4))) {
-				rt.Fail(errs, "max_length", p33.String(), "must be at most {value} characters", "maxLength", map[string]any{"value": int(4)})
+				rt.Fail(errs, "max_length", p35.String(), "must be at most {value} characters", "maxLength", map[string]any{"value": int(4)})
 			}
 		}
 	}
@@ -352,8 +360,8 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p34 := path.Field(".extra")
-		_ = p34
+		p36 := path.Field(".extra")
+		_ = p36
 		if !rt.Present(v.Extra) {
 		}
 	}
@@ -361,12 +369,12 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p35 := path.Field(".coupon")
-		_ = p35
+		p37 := path.Field(".coupon")
+		_ = p37
 		if v.Coupon == "" {
 		} else {
 			if !(rt.ULID(v.Coupon)) {
-				rt.Fail(errs, "ulid", p35.String(), "must be a valid ULID", "ulid", map[string]any{})
+				rt.Fail(errs, "ulid", p37.String(), "must be a valid ULID", "ulid", map[string]any{})
 			}
 		}
 	}
@@ -374,13 +382,13 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p36 := path.Field(".type")
-		_ = p36
+		p38 := path.Field(".type")
+		_ = p38
 		if v.Type == "" {
-			rt.Required(errs, p36.String())
+			rt.Required(errs, p38.String())
 		} else {
 			if !(v.Type == "online" || v.Type == "offline") {
-				rt.Fail(errs, "enum", p36.String(), "must be one of {values}", "enum", map[string]any{"values": []any{"online", "offline"}})
+				rt.Fail(errs, "enum", p38.String(), "must be one of {values}", "enum", map[string]any{"values": []any{"online", "offline"}})
 			}
 		}
 	}
@@ -388,12 +396,12 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p37 := path.Field(".url")
-		_ = p37
+		p39 := path.Field(".url")
+		_ = p39
 		if v.URL == "" {
 		} else {
 			if !(rt.URL(v.URL)) {
-				rt.Fail(errs, "url", p37.String(), "must be a valid URL", "url", map[string]any{})
+				rt.Fail(errs, "url", p39.String(), "must be a valid URL", "url", map[string]any{})
 			}
 		}
 	}
@@ -401,8 +409,8 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p38 := path.Field(".venue")
-		_ = p38
+		p40 := path.Field(".venue")
+		_ = p40
 		if v.Venue == "" {
 		}
 	}
@@ -410,12 +418,12 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p39 := path.Field(".sku")
-		_ = p39
+		p41 := path.Field(".sku")
+		_ = p41
 		if v.Sku == "" {
 		} else {
 			if !(v.Sku == "SKU") {
-				rt.Fail(errs, "const", p39.String(), "must equal {value}", "const", map[string]any{"value": "SKU"})
+				rt.Fail(errs, "const", p41.String(), "must equal {value}", "const", map[string]any{"value": "SKU"})
 			}
 		}
 	}
@@ -423,21 +431,21 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p40 := path.Field(".nick")
-		_ = p40
+		p42 := path.Field(".nick")
+		_ = p42
 		if v.Nick == "" {
 			v.Nick = "anon"
 		}
 		if v.Nick == "" {
-			rt.Required(errs, p40.String())
+			rt.Required(errs, p42.String())
 		} else {
 			v.Nick = rt.Trim(v.Nick)
 			v.Nick = rt.Lower(v.Nick)
 			if !(rt.RuneLen(v.Nick) >= int(int(2))) {
-				rt.Fail(errs, "min_length", p40.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(2)})
+				rt.Fail(errs, "min_length", p42.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(2)})
 			}
 			if !(rt.RuneLen(v.Nick) <= int(int(8))) {
-				rt.Fail(errs, "max_length", p40.String(), "must be at most {value} characters", "maxLength", map[string]any{"value": int(8)})
+				rt.Fail(errs, "max_length", p42.String(), "must be at most {value} characters", "maxLength", map[string]any{"value": int(8)})
 			}
 		}
 	}
@@ -445,67 +453,67 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p41 := path.Field(".ref")
-		_ = p41
+		p43 := path.Field(".ref")
+		_ = p43
 		if !rt.Present(v.Ref) {
 		} else {
-			ok42 := false
-			if !ok42 {
-				var probe43 verr.Errors
-				probe43.FailFast = true
-				if x44, matched := rt.AsIntegral(v.Ref); matched {
-					_ = x44
-					{
-						errs := &probe43
-						_ = errs
-						if !(float64(x44) >= float64(float64(1))) {
-							rt.Fail(errs, "min", p41.String(), "must be at least {value}", "min", map[string]any{"value": float64(1)})
-						}
-					}
-					if probe43.Len() == 0 {
-						ok42 = true
-					}
-				}
-			}
-			if !ok42 {
+			ok44 := false
+			if !ok44 {
 				var probe45 verr.Errors
 				probe45.FailFast = true
-				if x46, matched := rt.AsString(v.Ref); matched {
+				if x46, matched := rt.AsIntegral(v.Ref); matched {
 					_ = x46
 					{
 						errs := &probe45
 						_ = errs
-						if !(rt.UUID(x46)) {
-							rt.Fail(errs, "uuid", p41.String(), "must be a valid UUID", "uuid", map[string]any{})
+						if !(float64(x46) >= float64(float64(1))) {
+							rt.Fail(errs, "min", p43.String(), "must be at least {value}", "min", map[string]any{"value": float64(1)})
 						}
 					}
 					if probe45.Len() == 0 {
-						ok42 = true
+						ok44 = true
 					}
 				}
 			}
-			if !ok42 {
+			if !ok44 {
 				var probe47 verr.Errors
 				probe47.FailFast = true
-				if x48, matched := rt.AsStruct[Address](v.Ref); matched {
+				if x48, matched := rt.AsString(v.Ref); matched {
 					_ = x48
 					{
 						errs := &probe47
 						_ = errs
-						if x48 == nil {
-							rt.Null(errs, p41.String())
-						} else {
-							r49 := (*x48)
-							validateAddress(ctx, &r49, reg, p41, errs)
+						if !(rt.UUID(x48)) {
+							rt.Fail(errs, "uuid", p43.String(), "must be a valid UUID", "uuid", map[string]any{})
 						}
 					}
 					if probe47.Len() == 0 {
-						ok42 = true
+						ok44 = true
 					}
 				}
 			}
-			if !ok42 {
-				rt.Union(errs, p41.String(), 3)
+			if !ok44 {
+				var probe49 verr.Errors
+				probe49.FailFast = true
+				if x50, matched := rt.AsStruct[Address](v.Ref); matched {
+					_ = x50
+					{
+						errs := &probe49
+						_ = errs
+						if x50 == nil {
+							rt.Null(errs, p43.String())
+						} else {
+							r51 := (*x50)
+							validateAddress(ctx, &r51, reg, p43, errs)
+						}
+					}
+					if probe49.Len() == 0 {
+						ok44 = true
+					}
+				}
+			}
+			if !ok44 {
+				rt.Union(errs, p43.String(), 3)
 			}
 		}
 	}
@@ -513,22 +521,22 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p50 := path.Field(".event")
-		_ = p50
+		p52 := path.Field(".event")
+		_ = p52
 		if false {
-			rt.Required(errs, p50.String())
+			rt.Required(errs, p52.String())
 		} else {
-			o51 := v.Event
-			switch o51.Kind {
+			o53 := v.Event
+			switch o53.Kind {
 			case "offline":
 				{
-					p52 := p50.Field(".kind")
-					_ = p52
-					if (&o51).Kind == "" {
-						rt.Required(errs, p52.String())
+					p54 := p52.Field(".kind")
+					_ = p54
+					if (&o53).Kind == "" {
+						rt.Required(errs, p54.String())
 					} else {
-						if !((&o51).Kind == "offline") {
-							rt.Fail(errs, "const", p52.String(), "must equal {value}", "const", map[string]any{"value": "offline"})
+						if !((&o53).Kind == "offline") {
+							rt.Fail(errs, "const", p54.String(), "must equal {value}", "const", map[string]any{"value": "offline"})
 						}
 					}
 				}
@@ -536,13 +544,13 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 					return
 				}
 				{
-					p53 := p50.Field(".address")
-					_ = p53
-					if (&o51).Address == nil {
-						rt.Required(errs, p53.String())
+					p55 := p52.Field(".address")
+					_ = p55
+					if (&o53).Address == nil {
+						rt.Required(errs, p55.String())
 					} else {
-						r54 := (*(&o51).Address)
-						validateAddress(ctx, &r54, reg, p53, errs)
+						r56 := (*(&o53).Address)
+						validateAddress(ctx, &r56, reg, p55, errs)
 					}
 				}
 				if errs.Stopped() {
@@ -550,13 +558,13 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 				}
 			case "online":
 				{
-					p55 := p50.Field(".kind")
-					_ = p55
-					if (&o51).Kind == "" {
-						rt.Required(errs, p55.String())
+					p57 := p52.Field(".kind")
+					_ = p57
+					if (&o53).Kind == "" {
+						rt.Required(errs, p57.String())
 					} else {
-						if !((&o51).Kind == "online") {
-							rt.Fail(errs, "const", p55.String(), "must equal {value}", "const", map[string]any{"value": "online"})
+						if !((&o53).Kind == "online") {
+							rt.Fail(errs, "const", p57.String(), "must equal {value}", "const", map[string]any{"value": "online"})
 						}
 					}
 				}
@@ -564,13 +572,13 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 					return
 				}
 				{
-					p56 := p50.Field(".url")
-					_ = p56
-					if (&o51).URL == "" {
-						rt.Required(errs, p56.String())
+					p58 := p52.Field(".url")
+					_ = p58
+					if (&o53).URL == "" {
+						rt.Required(errs, p58.String())
 					} else {
-						if !(rt.URL((&o51).URL)) {
-							rt.Fail(errs, "url", p56.String(), "must be a valid URL", "url", map[string]any{})
+						if !(rt.URL((&o53).URL)) {
+							rt.Fail(errs, "url", p58.String(), "must be a valid URL", "url", map[string]any{})
 						}
 					}
 				}
@@ -578,7 +586,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 					return
 				}
 			default:
-				rt.Variant(errs, p50.String(), "kind", o51.Kind)
+				rt.Variant(errs, p52.String(), "kind", o53.Kind)
 			}
 		}
 	}
@@ -586,8 +594,8 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p57 := path.Field(".pref")
-		_ = p57
+		p59 := path.Field(".pref")
+		_ = p59
 		if v.Pref == nil {
 			v.Pref = rt.Ptr("a")
 		}
@@ -595,7 +603,7 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		} else {
 			(*v.Pref) = rt.Upper((*v.Pref))
 			if !((*v.Pref) == "A" || (*v.Pref) == "B") {
-				rt.Fail(errs, "enum", p57.String(), "must be one of {values}", "enum", map[string]any{"values": []any{"A", "B"}})
+				rt.Fail(errs, "enum", p59.String(), "must be one of {values}", "enum", map[string]any{"values": []any{"A", "B"}})
 			}
 		}
 	}
@@ -603,15 +611,15 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p58 := path.Field(".host")
-		_ = p58
+		p60 := path.Field(".host")
+		_ = p60
 		if v.Host == "" {
 		} else {
 			if !(rt.Hostname(v.Host)) {
-				rt.Fail(errs, "hostname", p58.String(), "must be a valid hostname", "hostname", map[string]any{})
+				rt.Fail(errs, "hostname", p60.String(), "must be a valid hostname", "hostname", map[string]any{})
 			}
 			if !(rt.NotBlank(v.Host)) {
-				rt.Fail(errs, "not_blank", p58.String(), "must not be blank", "notBlank", map[string]any{})
+				rt.Fail(errs, "not_blank", p60.String(), "must not be blank", "notBlank", map[string]any{})
 			}
 		}
 	}
@@ -619,12 +627,12 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p59 := path.Field(".ver")
-		_ = p59
+		p61 := path.Field(".ver")
+		_ = p61
 		if v.Ver == "" {
 		} else {
 			if !(rt.Semver(v.Ver)) {
-				rt.Fail(errs, "semver", p59.String(), "must be a valid semantic version", "semver", map[string]any{})
+				rt.Fail(errs, "semver", p61.String(), "must be a valid semantic version", "semver", map[string]any{})
 			}
 		}
 	}
@@ -632,15 +640,15 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p60 := path.Field(".addr")
-		_ = p60
+		p62 := path.Field(".addr")
+		_ = p62
 		if v.Addr == "" {
 		} else {
 			if !(rt.IP(v.Addr)) {
-				rt.Fail(errs, "ip", p60.String(), "must be a valid IP address", "ip", map[string]any{})
+				rt.Fail(errs, "ip", p62.String(), "must be a valid IP address", "ip", map[string]any{})
 			}
 			if !(rt.MAC(v.Addr)) {
-				rt.Fail(errs, "mac", p60.String(), "must be a valid MAC address", "mac", map[string]any{})
+				rt.Fail(errs, "mac", p62.String(), "must be a valid MAC address", "mac", map[string]any{})
 			}
 		}
 	}
@@ -648,42 +656,24 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p61 := path.Field(".choice")
-		_ = p61
+		p63 := path.Field(".choice")
+		_ = p63
 		if !rt.Present(v.Choice) {
 		} else {
-			// discriminated union on Go type any: delegated to the interpreter (see fallback62).
-			rt.Interpret(ctx, reg, fallback62, v.Choice, &p61, errs)
+			// discriminated union on Go type any: delegated to the interpreter (see fallback64).
+			rt.Interpret(ctx, reg, fallback64, v.Choice, &p63, errs)
 		}
 	}
 	if errs.Stopped() {
 		return
 	}
 	{
-		p63 := path.Field(".code")
-		_ = p63
+		p65 := path.Field(".code")
+		_ = p65
 		if v.Code == "" {
 		} else {
-			ok64 := false
-			if !ok64 {
-				var probe65 verr.Errors
-				probe65.FailFast = true
-				x66 := v.Code
-				_ = x66
-				{
-					{
-						errs := &probe65
-						_ = errs
-						if !(rt.UUID(x66)) {
-							rt.Fail(errs, "uuid", p63.String(), "must be a valid UUID", "uuid", map[string]any{})
-						}
-					}
-					if probe65.Len() == 0 {
-						ok64 = true
-					}
-				}
-			}
-			if !ok64 {
+			ok66 := false
+			if !ok66 {
 				var probe67 verr.Errors
 				probe67.FailFast = true
 				x68 := v.Code
@@ -692,20 +682,38 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 					{
 						errs := &probe67
 						_ = errs
-						if !(rt.RuneLen(x68) >= int(int(8))) {
-							rt.Fail(errs, "min_length", p63.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(8)})
-						}
-						if !(pattern69.MatchString(x68)) {
-							rt.Fail(errs, "pattern", p63.String(), "must match {regex}", "pattern", map[string]any{"regex": "^SKU-"})
+						if !(rt.UUID(x68)) {
+							rt.Fail(errs, "uuid", p65.String(), "must be a valid UUID", "uuid", map[string]any{})
 						}
 					}
 					if probe67.Len() == 0 {
-						ok64 = true
+						ok66 = true
 					}
 				}
 			}
-			if !ok64 {
-				rt.Union(errs, p63.String(), 3)
+			if !ok66 {
+				var probe69 verr.Errors
+				probe69.FailFast = true
+				x70 := v.Code
+				_ = x70
+				{
+					{
+						errs := &probe69
+						_ = errs
+						if !(rt.RuneLen(x70) >= int(int(8))) {
+							rt.Fail(errs, "min_length", p65.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(8)})
+						}
+						if !(pattern71.MatchString(x70)) {
+							rt.Fail(errs, "pattern", p65.String(), "must match {regex}", "pattern", map[string]any{"regex": "^SKU-"})
+						}
+					}
+					if probe69.Len() == 0 {
+						ok66 = true
+					}
+				}
+			}
+			if !ok66 {
+				rt.Union(errs, p65.String(), 3)
 			}
 		}
 	}
@@ -713,25 +721,25 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p70 := path.Field(".bag")
-		_ = p70
+		p72 := path.Field(".bag")
+		_ = p72
 		if !rt.Present(v.Bag) {
 		} else {
-			// union with a array variant: delegated to the interpreter (see fallback71).
-			rt.Interpret(ctx, reg, fallback71, v.Bag, &p70, errs)
+			// union with a array variant: delegated to the interpreter (see fallback73).
+			rt.Interpret(ctx, reg, fallback73, v.Bag, &p72, errs)
 		}
 	}
 	if errs.Stopped() {
 		return
 	}
 	{
-		p72 := path.Field(".contact")
-		_ = p72
+		p74 := path.Field(".contact")
+		_ = p74
 		if v.Contact == "" {
 		} else {
 			v.Contact = rt.NormalizeEmail(v.Contact)
 			if !(rt.Email(v.Contact)) {
-				rt.Fail(errs, "email", p72.String(), "must be a valid email address", "email", map[string]any{})
+				rt.Fail(errs, "email", p74.String(), "must be a valid email address", "email", map[string]any{})
 			}
 		}
 	}
@@ -739,13 +747,13 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p73 := path.Field(".units")
-		_ = p73
+		p75 := path.Field(".units")
+		_ = p75
 		if false {
 		} else {
 			// coerce: no-op on typed input
 			if !(float64(v.Units) >= float64(float64(1))) {
-				rt.Fail(errs, "min", p73.String(), "must be at least {value}", "min", map[string]any{"value": float64(1)})
+				rt.Fail(errs, "min", p75.String(), "must be at least {value}", "min", map[string]any{"value": float64(1)})
 			}
 		}
 	}
@@ -753,12 +761,12 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p74 := path.Field(".card")
-		_ = p74
+		p76 := path.Field(".card")
+		_ = p76
 		if v.Card == "" {
 		} else {
 			if !(rt.CreditCard(v.Card)) {
-				rt.Fail(errs, "credit_card", p74.String(), "must be a valid card number", "creditCard", map[string]any{})
+				rt.Fail(errs, "credit_card", p76.String(), "must be a valid card number", "creditCard", map[string]any{})
 			}
 		}
 	}
@@ -766,13 +774,13 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 		return
 	}
 	{
-		p75 := path.Field(".lat")
-		_ = p75
+		p77 := path.Field(".lat")
+		_ = p77
 		if false {
-			rt.Required(errs, p75.String())
+			rt.Required(errs, p77.String())
 		} else {
 			if !(rt.Latitude(float64(v.Lat))) {
-				rt.Fail(errs, "latitude", p75.String(), "must be between -90 and 90", "latitude", map[string]any{})
+				rt.Fail(errs, "latitude", p77.String(), "must be between -90 and 90", "latitude", map[string]any{})
 			}
 		}
 	}
@@ -781,20 +789,20 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	}
 	if v.Type != "" && v.Type == "online" {
 		{
-			p77 := path.Field(".url")
-			_ = p77
-			x76 := v.URL
-			if !(rt.RuneLen(x76) >= int(int(1))) {
-				rt.Fail(errs, "min_length", p77.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
+			p79 := path.Field(".url")
+			_ = p79
+			x78 := v.URL
+			if !(rt.RuneLen(x78) >= int(int(1))) {
+				rt.Fail(errs, "min_length", p79.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
 			}
 		}
 	} else {
 		{
-			p79 := path.Field(".venue")
-			_ = p79
-			x78 := v.Venue
-			if !(rt.RuneLen(x78) >= int(int(1))) {
-				rt.Fail(errs, "min_length", p79.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
+			p81 := path.Field(".venue")
+			_ = p81
+			x80 := v.Venue
+			if !(rt.RuneLen(x80) >= int(int(1))) {
+				rt.Fail(errs, "min_length", p81.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
 			}
 		}
 	}
@@ -803,33 +811,33 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	}
 	if (v.Coupon != "") && !(v.Type != "" && (v.Type == "offline")) {
 		if v.Venue == "" {
-			p80 := path.Field(".venue")
-			rt.Required(errs, p80.String())
+			p82 := path.Field(".venue")
+			rt.Required(errs, p82.String())
 		}
 	}
 	if errs.Stopped() {
 		return
 	}
-	n81 := 0
+	n83 := 0
 	if v.URL != "" {
-		n81++
+		n83++
 	}
 	if v.Venue != "" {
-		n81++
+		n83++
 	}
-	if !(n81 >= 1) {
-		rt.Group(errs, path.String(), "at-least-one", []string{"URL", "Venue"}, n81)
+	if !(n83 >= 1) {
+		rt.Group(errs, path.String(), "at-least-one", []string{"URL", "Venue"}, n83)
 	}
 	if errs.Stopped() {
 		return
 	}
 	if (float64(v.Weight) > float64(v.Weight)) || (float64(v.Qty) >= float64(int(50))) {
 		{
-			p83 := path.Field(".rush")
-			_ = p83
-			x82 := v.Rush
-			if !(x82 == true) {
-				rt.Fail(errs, "const", p83.String(), "must equal {value}", "const", map[string]any{"value": true})
+			p85 := path.Field(".rush")
+			_ = p85
+			x84 := v.Rush
+			if !(x84 == true) {
+				rt.Fail(errs, "const", p85.String(), "must equal {value}", "const", map[string]any{"value": true})
 			}
 		}
 	} else {
@@ -840,11 +848,11 @@ func validateOrder(ctx context.Context, v *Order, reg rt.Registry, path rt.Path,
 	if rt.CondT(ctx, reg, "vip", *v) {
 	} else {
 		{
-			p85 := path.Field(".qty")
-			_ = p85
-			x84 := v.Qty
-			if !(float64(x84) <= float64(float64(10))) {
-				rt.Fail(errs, "lte", p85.String(), "must be at most {value}", "lte", map[string]any{"value": float64(10)})
+			p87 := path.Field(".qty")
+			_ = p87
+			x86 := v.Qty
+			if !(float64(x86) <= float64(float64(10))) {
+				rt.Fail(errs, "lte", p87.String(), "must be at most {value}", "lte", map[string]any{"value": float64(10)})
 			}
 		}
 	}
@@ -874,13 +882,13 @@ func ValidateAddressInto(ctx context.Context, v *Address, reg rt.Registry, errs 
 func validateAddress(ctx context.Context, v *Address, reg rt.Registry, path rt.Path, errs *verr.Errors) {
 	_, _, _ = ctx, reg, path
 	{
-		p86 := path.Field(".street")
-		_ = p86
+		p88 := path.Field(".street")
+		_ = p88
 		if v.Street == "" {
-			rt.Required(errs, p86.String())
+			rt.Required(errs, p88.String())
 		} else {
 			if !(rt.RuneLen(v.Street) >= int(int(1))) {
-				rt.Fail(errs, "min_length", p86.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
+				rt.Fail(errs, "min_length", p88.String(), "must be at least {value} characters", "minLength", map[string]any{"value": int(1)})
 			}
 		}
 	}
@@ -888,12 +896,12 @@ func validateAddress(ctx context.Context, v *Address, reg rt.Registry, path rt.P
 		return
 	}
 	{
-		p87 := path.Field(".zip")
-		_ = p87
+		p89 := path.Field(".zip")
+		_ = p89
 		if v.Zip == "" {
 		} else {
-			if !(pattern88.MatchString(v.Zip)) {
-				rt.Fail(errs, "pattern", p87.String(), "must match {regex}", "pattern", map[string]any{"regex": "^[0-9]{5}$"})
+			if !(pattern90.MatchString(v.Zip)) {
+				rt.Fail(errs, "pattern", p89.String(), "must match {regex}", "pattern", map[string]any{"regex": "^[0-9]{5}$"})
 			}
 		}
 	}

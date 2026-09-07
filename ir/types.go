@@ -71,6 +71,18 @@ var extraPolicies = map[ExtraPolicy]struct{}{
 // Gated, not on a single field, because they read more than one field.
 type ObjectNode struct {
 	Base
+
+	// Rules apply to the object as a whole rather than to any one field:
+	// "this booking is internally consistent", "this combination is not
+	// already taken". Without them a check that reads several fields at
+	// once has nowhere to live — a gate can only decide whether other
+	// rules apply, it cannot report a failure of its own.
+	//
+	// In practice these are custom and async rules, because those are the
+	// kinds whose subject is a whole value. Nothing forbids others; the IR
+	// does not police which kinds suit which node, here or anywhere else.
+	Rules []Rule `json:"rules,omitempty"`
+
 	Fields []FieldNode  `json:"fields"`
 	Extra  ExtraPolicy  `json:"extra,omitempty"`
 	Gated  []GatedRules `json:"gated,omitempty"`
@@ -295,6 +307,8 @@ func newNode(k Kind) (TypeNode, bool) {
 // walk rules uniformly without a fourteen-arm type switch at every call site.
 func Rules(n TypeNode) []Rule {
 	switch t := n.(type) {
+	case *ObjectNode:
+		return t.Rules
 	case *StringNode:
 		return t.Rules
 	case *IntNode:

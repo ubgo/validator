@@ -362,6 +362,9 @@ func (r *run) node(path string, n ir.TypeNode, val reflect.Value, sc *scope) {
 	}
 	switch t := n.(type) {
 	case *ir.ObjectNode:
+		// Object-level rules run before the fields, so a whole-value check
+		// reports first and fail-fast stops on it rather than on a field.
+		r.rules(path, t.Rules, val, sc)
 		r.object(path, t, val)
 	case *ir.StringNode:
 		r.rules(path, t.Rules, val, sc)
