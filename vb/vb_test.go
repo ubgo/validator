@@ -635,3 +635,98 @@ func TestObjectLevelRules(t *testing.T) {
 		t.Error("Custom did not attach the rule")
 	}
 }
+
+// TestValueSchema covers validating a single value. Not every check has a
+// struct behind it — a path parameter, a query string — and wrapping one
+// in a throwaway struct just to state a rule is ceremony the library
+// should not demand.
+func TestValueSchema(t *testing.T) {
+	s, err := Value("Email", String().Email().MinLength(6))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Name() != "Email" {
+		t.Errorf("name = %q", s.Name())
+	}
+	root := s.IR().Root
+	if root.Kind() != ir.KindString {
+		t.Fatalf("root kind = %s, want a string node", root.Kind())
+	}
+	if len(ir.Rules(root)) != 2 {
+		t.Errorf("root carries %d rules, want 2", len(ir.Rules(root)))
+	}
+
+	// The same structural check Build runs: a schema that cannot execute
+	// must fail here, not on the first request.
+	if _, err := Value("Bad", String().Pattern("(")); err == nil {
+		t.Error("Value accepted a regex that is not valid RE2")
+	}
+
+	// Custom bodies travel with the schema, so a value schema can carry
+	// them exactly like a struct schema.
+	withFn, err := Value("Handle", String().Custom("not_admin", func(_ context.Context, v string) error {
+		if v == "admin" {
+			return errors.New("reserved")
+		}
+		return nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, found := withFn.Func("not_admin"); !found {
+		t.Error("the custom body did not travel into the schema")
+	}
+	raw, found := withFn.TypedFunc("not_admin")
+	if !found {
+		t.Fatal("typed body missing")
+	}
+	if _, ok := raw.(func(context.Context, string) error); !ok {
+		t.Errorf("typed body signature = %T", raw)
+	}
+
+	// An async rule on a value schema is discoverable, so rulehttp serves
+	// it like any other.
+	withAsync := MustValue("H2", String().Async("free", "/v/h_free", func(_ context.Context, v string) error { return nil }))
+	if eps := withAsync.Endpoints(); len(eps) != 1 || eps[0].Path != "/v/h_free" {
+		t.Errorf("endpoints = %+v", eps)
+	}
+
+	// Every builder kind works, not just strings.
+	for _, tc := range []struct {
+		name string
+		kind ir.Kind
+		mk   func() (ir.TypeNode, error)
+	}{
+		{"int", ir.KindInt, func() (ir.TypeNode, error) { s, e := Value("N", Int[int]().Min(1)); return rootOf(s, e) }},
+		{"float", ir.KindFloat, func() (ir.TypeNode, error) { s, e := Value("F", Float[float64]()); return rootOf(s, e) }},
+		{"bool", ir.KindBool, func() (ir.TypeNode, error) { s, e := Value("B", Bool()); return rootOf(s, e) }},
+		{"time", ir.KindTime, func() (ir.TypeNode, error) { s, e := Value("T", Time()); return rootOf(s, e) }},
+		{"array", ir.KindArray, func() (ir.TypeNode, error) { s, e := Value("A", Array(String())); return rootOf(s, e) }},
+		{"map", ir.KindMap, func() (ir.TypeNode, error) { s, e := Value("M", Map(String(), Int[int]())); return rootOf(s, e) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			n, err := tc.mk()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n.Kind() != tc.kind {
+				t.Errorf("kind = %s, want %s", n.Kind(), tc.kind)
+			}
+		})
+	}
+
+	// MustValue panics rather than returning, for package-level schemas.
+	defer func() {
+		if recover() == nil {
+			t.Error("MustValue did not panic on an invalid schema")
+		}
+	}()
+	MustValue("Bad", String().Pattern("("))
+}
+
+func rootOf[V any](s *Schema[V], err error) (ir.TypeNode, error) {
+	if err != nil {
+		return nil, err
+	}
+	return s.IR().Root, nil
+}

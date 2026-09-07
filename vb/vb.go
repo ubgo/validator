@@ -232,9 +232,14 @@ func (f Field[T]) Default(v any) Field[T] {
 // [Struct] → [StructBuilder.Build] and hand it to an executor or an emitter;
 // the IR alone is what leaves Go.
 type Schema[T any] struct {
-	name    string
-	meta    ir.SchemaMeta
-	root    *ir.ObjectNode
+	name string
+	meta ir.SchemaMeta
+
+	// root is usually an object, but not always: [Value] builds a schema
+	// whose root is a scalar, so a single value can be validated without
+	// inventing a struct to hold it. Everything that reads this walks the
+	// TypeNode interface, so both shapes work unchanged.
+	root    ir.TypeNode
 	reg     *registry
 	getters map[string]func(T) any
 }
@@ -531,4 +536,57 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// Value builds a schema for a single value rather than a struct.
+//
+// Not every validation has a struct behind it. A path parameter, a query
+// string, one field pulled out of a form — the rule is the same rule, and
+// wrapping it in a one-field struct just to say so is ceremony:
+//
+//	var Email = vb.MustValue("Email", vb.String().Email())
+//
+//	v, err := interp.FromSchema(Email)
+//	err = v.Validate(ctx, "ada@example.com")
+//
+// Issues report at the root path, "$", because there is no field to name.
+//
+// The type parameter comes from the builder, so the value passed to
+// Validate is checked the same way a field's would be: a schema built from
+// vb.String() is a *Schema[string], and handing it an int is a type issue,
+// not a silent pass.
+//
+// Cross-field rules and gates are meaningless here and there is no way to
+// express them, which is the point: this entry is for the case that has
+// exactly one value.
+func Value[V any](name string, b Builder[V]) (*Schema[V], error) {
+	reg := newRegistry()
+	if err := reg.merge(b.registry()); err != nil {
+		return nil, err
+	}
+	if reg.err != nil {
+		return nil, reg.err
+	}
+	s := &Schema[V]{
+		name: name,
+		meta: ir.SchemaMeta{Title: name},
+		root: b.Node(),
+		reg:  reg,
+	}
+	// The same check Build runs: a bad regex or an unresolvable ref must
+	// fail here, not on the first request.
+	if err := ir.Check(s.IR()); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// MustValue is [Value] for a package-level schema, where a build error is
+// a programming error and there is no caller to return it to.
+func MustValue[V any](name string, b Builder[V]) *Schema[V] {
+	s, err := Value(name, b)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }

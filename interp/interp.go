@@ -673,3 +673,56 @@ func (r *run) transform(parent reflect.Value, f ir.FieldNode, child reflect.Valu
 	}
 	return out
 }
+
+// TypedValidator is a validator bound to the Go type its schema was built
+// from.
+//
+// [Validator.Validate] takes an `any`, because one validator serves struct
+// input, map input and sub-documents alike. That flexibility costs the
+// call site its type check: handing an int to a schema built for a string
+// compiles, and fails at runtime as a type issue.
+//
+// Typed closes that hole for callers who want it. The compiler rejects the
+// wrong type instead of the validator reporting it:
+//
+//	v, err := interp.Typed(vb.MustValue("Email", vb.String().Email()))
+//	// v is an *interp.TypedValidator[string]
+//	err = v.Validate(ctx, "ada@example.com")   // compiles
+//	err = v.Validate(ctx, 42)                  // does not compile
+//
+// It wraps the same [Validator], so behaviour is identical; only the entry
+// point is narrowed. Reach for [Validator] itself when the input really is
+// dynamic, such as a decoded JSON map.
+type TypedValidator[T any] struct{ v *Validator }
+
+// Typed compiles a schema into a validator that only accepts T.
+func Typed[T any](s *vb.Schema[T], opts ...Option) (*TypedValidator[T], error) {
+	v, err := FromSchema(s, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &TypedValidator[T]{v: v}, nil
+}
+
+// Validate checks a value of the schema's own type. nil when valid, a
+// *verr.Errors otherwise.
+func (t *TypedValidator[T]) Validate(ctx context.Context, value T) error {
+	return t.v.Validate(ctx, value)
+}
+
+// Run is [Validator.Run] over the typed entry: it always returns a result,
+// never nil, so a caller can inspect the issue list directly.
+func (t *TypedValidator[T]) Run(ctx context.Context, value T) *verr.Errors {
+	return t.v.Run(ctx, value)
+}
+
+// RunInto is [Validator.RunInto] over the typed entry, for a caller-owned
+// issue list or fail-fast.
+func (t *TypedValidator[T]) RunInto(ctx context.Context, value T, errs *verr.Errors) {
+	t.v.RunInto(ctx, value, errs)
+}
+
+// Untyped returns the underlying validator, for the cases the typed entry
+// deliberately does not cover: map input, or validating a sub-document at
+// a path.
+func (t *TypedValidator[T]) Untyped() *Validator { return t.v }

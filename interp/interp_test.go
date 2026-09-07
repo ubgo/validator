@@ -922,3 +922,78 @@ func TestObjectLevelRulesRun(t *testing.T) {
 		t.Error("object rule did not run on map input")
 	}
 }
+
+// TestValueAndTypedValidator covers the two halves of validating without a
+// struct: authoring the schema, and a call site the compiler can check.
+func TestValueAndTypedValidator(t *testing.T) {
+	ctx := context.Background()
+
+	// The untyped entry accepts anything, and reports a wrong type as an
+	// issue rather than a panic.
+	email := vb.MustValue("Email", vb.String().Email())
+	v, err := FromSchema(email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := v.Run(ctx, "nope"); e.Len() != 1 || e.Issues[0].Path != "$" || e.Issues[0].Code != "email" {
+		t.Errorf("bad email = %+v", e.Issues)
+	}
+	if e := v.Run(ctx, "ada@example.com"); e.Len() != 0 {
+		t.Errorf("good email = %+v", e.Issues)
+	}
+	if e := v.Run(ctx, 42); e.Len() != 1 || e.Issues[0].Code != verr.CodeType {
+		t.Errorf("wrong type = %+v", e.Issues)
+	}
+
+	// The typed entry narrows the call site: passing 42 here would not
+	// compile, which is the guarantee it exists to give.
+	tv, err := Typed(email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tv.Validate(ctx, "ada@example.com"); err != nil {
+		t.Errorf("typed valid: %v", err)
+	}
+	if err := tv.Validate(ctx, "nope"); err == nil {
+		t.Error("typed invalid was accepted")
+	}
+	if got := tv.Run(ctx, "nope"); got.Len() != 1 {
+		t.Errorf("typed Run = %+v", got.Issues)
+	}
+	first := &verr.Errors{FailFast: true}
+	tv.RunInto(ctx, "nope", first)
+	if first.Len() != 1 {
+		t.Errorf("typed RunInto = %+v", first.Issues)
+	}
+	if tv.Untyped() == nil {
+		t.Error("Untyped returned nil")
+	}
+
+	// A struct schema goes through the typed entry too, so the two entries
+	// are not two worlds.
+	type U struct{ Email string }
+	fe := vb.NewField("Email", func(u U) string { return u.Email }).JSON("email")
+	su := vb.Struct("U", vb.F(fe, vb.String().Email())).MustBuild()
+	tu, err := Typed(su)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tu.Validate(ctx, U{Email: "nope"}); err == nil {
+		t.Error("typed struct validation accepted a bad value")
+	}
+
+	// Collections and numbers, since the root need not be a scalar.
+	tags, _ := Typed(vb.MustValue("Tags", vb.Array(vb.String().MinLength(2)).MaxItems(2)))
+	if e := tags.Run(ctx, []string{"a"}); e.Len() != 1 || e.Issues[0].Path != "$[0]" {
+		t.Errorf("array element path = %+v", e.Issues)
+	}
+	if e := tags.Run(ctx, []string{"ab", "cd", "ef"}); e.Len() != 1 || e.Issues[0].Code != "max_items" {
+		t.Errorf("array bound = %+v", e.Issues)
+	}
+
+	// Sentinels work on a value schema's result like any other.
+	age, _ := Typed(vb.MustValue("Age", vb.Int[int]().Min(18)))
+	if err := age.Validate(ctx, 5); !errors.Is(err, verr.Code("min")) {
+		t.Errorf("errors.Is over a value schema: %v", err)
+	}
+}
