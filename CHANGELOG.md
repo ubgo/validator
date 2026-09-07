@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- `docs/API.md`: a generated reference listing every exported symbol in every public package with the first sentence of its documentation, produced by `task doc:api`. Generated rather than written because a hand-maintained list rots — this repository has already watched a hand-written section describe a shipped feature as unimplemented — and a test fails when the page no longer matches the source, verified by tampering with it.
+
 ### Fixed
 - `validatorctl fields` emitted accessors that did not compile when a package's name differed from its directory. The identifier was guessed from the import path, so a directory `vendorlib` declaring `package money` produced a file using `money.Amount` while importing nothing that defines it. The name is now read from the imported package's own clause, resolved through the module root — exact, and without pulling a type checker into a generator that otherwise runs on `go/parser` alone. Resolution degrades to the old guess for anything outside the module, which is correct for the standard library and ordinary dependencies. A second defect surfaced with it: imports were collapsed by path, so a package reached through both its own name and an alias lost one of the two import lines.
 

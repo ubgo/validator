@@ -116,6 +116,11 @@ tasks:
     cmds:
       - go doc -all ./ir
 
+  doc:api:
+    desc: Regenerate docs/API.md from the source (a test fails when it is stale)
+    cmds:
+      - go run ./internal/cmd/apidoc > docs/API.md
+
   deps:
     desc: Show this module's third-party dependencies
     cmds:

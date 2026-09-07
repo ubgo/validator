@@ -8,7 +8,7 @@
 
 `validator` is a struct-native Go validation library whose rules are stored as a **serializable intermediate representation (IR)** instead of opaque closures. Because the rules are data, the same tree that validates in Go can be exported to JSON Schema and compiled to a Standard-Schema-compatible TypeScript validator. The backend stays the single source of truth; the frontend validator is generated, never hand-maintained; and any rule that genuinely cannot cross the language boundary is listed in a portability manifest instead of being silently dropped.
 
-**New here? Read the [user guide](docs/GUIDE.md)**: a five-step quickstart, the end-to-end workflow with diagrams, and every feature with a snippet. Every snippet in it is executed by `examples/guide_test.go`.
+**New here? Read the [user guide](docs/GUIDE.md)**: a five-step quickstart, the end-to-end workflow with diagrams, and every feature with a snippet. Every snippet in it is executed by `examples/guide_test.go`. For the full symbol list there is a generated [API reference](docs/API.md), and [pkg.go.dev](https://pkg.go.dev/github.com/ubgo/validator) renders the doc comments.
 
 ## Why
 

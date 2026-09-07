@@ -2,6 +2,8 @@
 
 The files this guide shows live in `examples/guide/` and are compiled by the build; `examples/guide_test.go` asserts the behaviors claimed for them and that the guide embeds those files verbatim. If this guide and the repository disagree, the repository is right and this guide is stale.
 
+Every exported symbol is listed in the generated [API reference](API.md); this guide is the prose that tells you which ones you need.
+
 ## Contents
 
 1. [What it is, in one picture](#1-what-it-is-in-one-picture)
