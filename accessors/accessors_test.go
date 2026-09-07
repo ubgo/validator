@@ -2,6 +2,8 @@ package accessors
 
 import (
 	"bytes"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -191,5 +193,105 @@ func collapse(s string) string {
 func TestJSONName(t *testing.T) {
 	if jsonName(nil, "A") != "" {
 		t.Error("nil tag")
+	}
+}
+
+// TestImportsResolveByPackageName covers the case that made generated
+// accessors fail to compile: a package whose NAME differs from its
+// DIRECTORY. A file importing `x/vendorlib` that declares `package money`
+// writes `money.Amount`, and a generator guessing the identifier from the
+// path emitted a file using `money` while importing nothing that defines
+// it.
+//
+// Two names for one path is the second half: the same package reached
+// through its own name and an alias needs both import lines, or one of
+// the two field types has no package in scope.
+func TestImportsResolveByPackageName(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, body string) {
+		t.Helper()
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("go.mod", "module accprobe\n\ngo 1.24\n")
+	write("vendorlib/lib.go", "// Package money's name differs from its directory.\npackage money\n\ntype Amount struct{ Cents int64 }\n")
+	write("models/user.go", `package models
+
+import (
+	"accprobe/vendorlib"
+	alias "accprobe/vendorlib"
+)
+
+type User struct {
+	Paid  money.Amount
+	Owed  alias.Amount
+	Notes string
+}
+`)
+
+	res, err := Generate(Options{Dir: filepath.Join(dir, "models")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(res.Source)
+
+	// The field types name both identifiers...
+	for _, want := range []string{"money.Amount", "alias.Amount"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("generated source lacks %q:\n%s", want, src)
+		}
+	}
+	// ...so both must be imported, one of them aliased.
+	if !strings.Contains(src, `"accprobe/vendorlib"`) {
+		t.Error("the package's own name is not imported")
+	}
+	if !strings.Contains(src, `alias "accprobe/vendorlib"`) {
+		t.Error("the alias is not imported")
+	}
+	// And the plain import must NOT carry a redundant alias: the package
+	// is called money, so `money "accprobe/vendorlib"` would be noise.
+	if strings.Contains(src, `money "accprobe/vendorlib"`) {
+		t.Error("a redundant alias was written for the package's own name")
+	}
+
+	// The real proof: it parses as Go. A generator that emits a file
+	// naming an unimported package produces something that never builds,
+	// which is exactly the bug this test exists for.
+	if _, err := parser.ParseFile(token.NewFileSet(), "fields.gen.go", src, parser.AllErrors); err != nil {
+		t.Fatalf("generated source does not parse: %v\n%s", err, src)
+	}
+}
+
+// TestPackageNameResolutionIsBestEffort pins that resolution degrades
+// rather than fails: a path outside the module keeps the guess, which is
+// right for the standard library and every ordinary dependency.
+func TestPackageNameResolutionIsBestEffort(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module m\n\ngo 1.24\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(dir, "pkg")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := &Package{fset: token.NewFileSet(), dir: sub}
+
+	if _, ok := p.packageName("time"); ok {
+		t.Error("a stdlib path should not resolve to a directory")
+	}
+	if _, ok := p.packageName("github.com/other/mod/pkg"); ok {
+		t.Error("a path outside the module should not resolve")
+	}
+	if _, ok := p.packageName("m/missing"); ok {
+		t.Error("a path inside the module with no directory should not resolve")
+	}
+	// And the cache returns the same answer twice.
+	if _, ok := p.packageName("time"); ok {
+		t.Error("cached negative result changed")
 	}
 }

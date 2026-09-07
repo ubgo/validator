@@ -146,6 +146,80 @@ type Package struct {
 	fset  *token.FileSet
 	name  string
 	files map[string]*ast.File
+
+	// dir is where the package was read from, the anchor for resolving a
+	// relative import to a directory on disk.
+	dir string
+
+	// resolved caches import path → package name, because several files
+	// in a package usually import the same things.
+	resolved map[string]string
+}
+
+// packageName returns the name an import path declares, which is not
+// always its last path segment. Resolution is best-effort: a path outside
+// the module (the standard library, a dependency in the module cache) is
+// left to the caller's guess, which is correct for all but a handful of
+// packages and costs nothing when it is not.
+func (p *Package) packageName(path string) (string, bool) {
+	if p.resolved == nil {
+		p.resolved = map[string]string{}
+	}
+	if name, done := p.resolved[path]; done {
+		if name == "" {
+			return "", false
+		}
+		return name, true
+	}
+	name, ok := p.lookupPackageName(path)
+	if !ok {
+		p.resolved[path] = ""
+		return "", false
+	}
+	p.resolved[path] = name
+	return name, true
+}
+
+// lookupPackageName finds the directory an import path names and reads its
+// package clause. It walks up from the parsed package looking for the
+// module root, which is how a path like "example.com/m/vendorlib" becomes
+// a directory without invoking the go command or a type checker.
+func (p *Package) lookupPackageName(path string) (string, bool) {
+	if p.dir == "" || !strings.Contains(path, "/") {
+		return "", false // std, or nothing to anchor against
+	}
+	dir, err := filepath.Abs(p.dir)
+	if err != nil {
+		return "", false
+	}
+	for {
+		if mod, ok := moduleAt(dir); ok {
+			if rel, inside := strings.CutPrefix(path, mod); inside {
+				return packageNameAt(p.fset, filepath.Join(dir, filepath.FromSlash(strings.TrimPrefix(rel, "/"))))
+			}
+			return "", false // a different module: not ours to resolve
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}
+
+// moduleAt reads the module path from a go.mod in dir, if there is one.
+func moduleAt(dir string) (string, bool) {
+	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return "", false
+	}
+	for line := range strings.Lines(string(data)) {
+		line = strings.TrimSpace(line)
+		if rest, ok := strings.CutPrefix(line, "module"); ok {
+			return strings.Trim(strings.TrimSpace(rest), `"`), true
+		}
+	}
+	return "", false
 }
 
 // Name returns the package name.
@@ -172,7 +246,7 @@ func (p *Package) Struct(name string) (*StructDecl, bool) {
 				ts := spec.(*ast.TypeSpec)
 				st, isStruct := ts.Type.(*ast.StructType)
 				if isStruct && ts.Name.Name == name {
-					return &StructDecl{Name: name, Type: st, Imports: importMap(file)}, true
+					return &StructDecl{Name: name, Type: st, Imports: importMap(file, p.dir, p.packageName)}, true
 				}
 			}
 		}
@@ -199,7 +273,7 @@ func parsePackage(fset *token.FileSet, dir, output string) (*Package, error) {
 	if err != nil {
 		return nil, fmt.Errorf("accessors: read %s: %w", dir, err)
 	}
-	pkg := &Package{fset: fset, files: map[string]*ast.File{}}
+	pkg := &Package{fset: fset, files: map[string]*ast.File{}, dir: dir}
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || strings.HasSuffix(name, ".gen.go") || name == output {
@@ -261,7 +335,7 @@ func (g *generator) collect() error {
 	sort.Strings(files)
 	for _, fname := range files {
 		file := g.pkg.files[fname]
-		fileImports := importMap(file)
+		fileImports := importMap(file, g.pkg.dir, g.pkg.packageName)
 		for _, decl := range file.Decls {
 			gd, ok := decl.(*ast.GenDecl)
 			if !ok || gd.Tok != token.TYPE {
@@ -347,27 +421,65 @@ func (g *generator) noteImports(e ast.Expr, fileImports map[string]string) {
 	})
 }
 
-// importMap builds identifier → path for a file's imports. The identifier
-// is the explicit alias when present, otherwise the last path segment
-// (the common case; a package whose name differs from its directory is
-// the documented limitation).
-func importMap(file *ast.File) map[string]string {
+// importMap builds identifier → path for a file's imports.
+//
+// An explicit alias settles it. Otherwise the identifier is the imported
+// package's own name, which is USUALLY the last path segment but is not
+// required to be: a directory `vendorlib` may declare `package money`,
+// and a file importing it writes `money.Amount`. Guessing from the
+// directory produced accessors that named a package the emitted file
+// never imported, so the generated code did not compile.
+//
+// resolve looks the real name up, cheaply: find the directory on disk and
+// read one file's package clause. That is enough to be exact without
+// pulling in a type checker, which for a generator that otherwise runs on
+// go/parser alone would be a heavy dependency for one edge.
+func importMap(file *ast.File, dir string, resolve func(path string) (string, bool)) map[string]string {
 	out := map[string]string{}
 	for _, imp := range file.Imports {
 		path, err := strconv.Unquote(imp.Path.Value)
 		if err != nil {
 			continue
 		}
-		name := filepath.Base(path)
 		if imp.Name != nil {
-			name = imp.Name.Name
-		}
-		if name == "." || name == "_" {
+			// An alias, including "." and "_", which are not identifiers a
+			// selector can name.
+			if name := imp.Name.Name; name != "." && name != "_" {
+				out[name] = path
+			}
 			continue
+		}
+		name := filepath.Base(path)
+		if resolve != nil {
+			if real, ok := resolve(path); ok {
+				name = real
+			}
 		}
 		out[name] = path
 	}
 	return out
+}
+
+// packageNameAt reads the package clause of the first Go file in dir.
+// Returns false when the directory cannot be read or holds no Go file,
+// in which case the caller keeps its guess.
+func packageNameAt(fset *token.FileSet, dir string) (string, bool) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.PackageClauseOnly)
+		if err != nil || f.Name == nil {
+			continue
+		}
+		return f.Name.Name, true
+	}
+	return "", false
 }
 
 // jsonName reads the json tag's name, or "" when absent, "-", or equal to
@@ -405,27 +517,44 @@ func (g *generator) render() ([]byte, error) {
 	fmt.Fprintln(&b)
 	fmt.Fprintf(&b, "package %s\n\n", g.pkg.name)
 
-	paths := make([]string, 0, len(g.imports)+1)
-	seen := map[string]bool{}
-	for _, p := range g.imports {
-		if !seen[p] {
-			seen[p] = true
-			paths = append(paths, p)
+	// One import line per IDENTIFIER, not per path. The same package can
+	// be reached by two names — its own and an alias — and a field typed
+	// through each needs both in scope, so collapsing by path would leave
+	// one of them undefined.
+	ids := make([]string, 0, len(g.imports)+1)
+	for id := range g.imports {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	hasVB := false
+	for _, id := range ids {
+		if g.imports[id] == vbImport {
+			hasVB = true
 		}
 	}
-	if !seen[vbImport] {
-		paths = append(paths, vbImport)
-	}
-	sort.Strings(paths)
 	fmt.Fprintln(&b, "import (")
-	for _, p := range paths {
+	lines := make([]string, 0, len(ids)+1)
+	for _, id := range ids {
+		path := g.imports[id]
+		// An alias is written only when the identifier differs from the
+		// package's own name; writing `money "x/vendorlib"` when money is
+		// already its name is legal but noise.
 		alias := ""
-		for id, path := range g.imports {
-			if path == p && id != filepath.Base(p) {
+		if real, ok := g.pkg.packageName(path); ok {
+			if id != real {
 				alias = id + " "
 			}
+		} else if id != filepath.Base(path) {
+			alias = id + " "
 		}
-		fmt.Fprintf(&b, "\t%s%s\n", alias, strconv.Quote(p))
+		lines = append(lines, fmt.Sprintf("\t%s%s", alias, strconv.Quote(path)))
+	}
+	if !hasVB {
+		lines = append(lines, "\t"+strconv.Quote(vbImport))
+	}
+	sort.Strings(lines)
+	for _, l := range lines {
+		fmt.Fprintln(&b, l)
 	}
 	fmt.Fprintln(&b, ")")
 
