@@ -7,7 +7,7 @@
 // want it.
 module github.com/ubgo/validator/cel
 
-go 1.24
+go 1.26.0
 
 require github.com/ubgo/validator v0.0.0
 
