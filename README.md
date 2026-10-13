@@ -232,7 +232,7 @@ Not protobuf-shaped. Not a Go→TS *type* generator. Not arbitrary Go→JS trans
 
 ## Development
 
-`task ci` is the gate: format, vet, lint, race tests for the library and CLI, typecheck plus coverage-thresholded tests plus build for the TypeScript runtime, then the proof module. `task build:cross` compiles for linux, darwin, windows and freebsd. The same runs in GitHub Actions on every push.
+`task ci` is the gate: format, vet, lint, race tests for the library and CLI, typecheck plus coverage-thresholded tests plus build for the TypeScript runtime, then the proof module. `task build:cross` compiles for linux, darwin, windows and freebsd. The GitHub Actions workflows run on manual dispatch only, so the local `task ci` is the gate.
 
 ## License
 

@@ -1,3 +1,9 @@
+# Manual only (owner's call, 2026-10-13: Actions minutes are a budget). To run automatically again, replace the on: block with:
+#   on:
+#     workflow_dispatch:
+#     schedule:
+#       - cron: "0 6 * * 1"
+
 # The full gate, identical to `task ci` locally: format, vet, lint, race
 # tests for the library and CLI, typecheck + coverage-thresholded tests +
 # build for the TypeScript runtime, then the proof module (independent JSON
@@ -17,8 +23,6 @@ name: ci
 # last commit is exactly what nobody is watching for.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 6 * * 1"
 
 permissions:
   contents: read

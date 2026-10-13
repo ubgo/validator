@@ -1,3 +1,8 @@
+# Manual only (owner's call, 2026-10-13: Actions minutes are a budget). To run automatically again, replace the on: block with:
+#   on:
+#     push:
+#       tags: ["v*"]
+
 # Tag-driven release: builds validatorctl for every supported platform and
 # attaches the binaries to the GitHub release; publishes @ubgo/validator to
 # npm with provenance when NPM_TOKEN is configured, otherwise runs a dry
@@ -5,8 +10,7 @@
 name: release
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
