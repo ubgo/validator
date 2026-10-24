@@ -1,0 +1,581 @@
+{
+  "version": "ubgo.validator.ir/v1",
+  "root": {
+    "kind": "object",
+    "fields": [
+      {
+        "name": "Email",
+        "json": "email",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "email"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Name",
+        "json": "name",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "minLength",
+              "params": {
+                "value": 2
+              }
+            },
+            {
+              "kind": "maxLength",
+              "params": {
+                "value": 40
+              }
+            },
+            {
+              "kind": "pattern",
+              "params": {
+                "regex": "^[a-zA-Z]+$"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Age",
+        "json": "age",
+        "type": {
+          "kind": "int",
+          "rules": [
+            {
+              "kind": "gte",
+              "params": {
+                "value": 18
+              }
+            },
+            {
+              "kind": "lte",
+              "params": {
+                "value": 120
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Score",
+        "json": "score",
+        "type": {
+          "kind": "float",
+          "bits": 64,
+          "rules": [
+            {
+              "kind": "gt",
+              "params": {
+                "value": 0
+              }
+            },
+            {
+              "kind": "lt",
+              "params": {
+                "value": 1
+              }
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Plan",
+        "json": "plan",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "enum",
+              "params": {
+                "values": [
+                  "free",
+                  "pro",
+                  "team plus"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Level",
+        "json": "level",
+        "type": {
+          "kind": "int",
+          "bits": 8,
+          "rules": [
+            {
+              "kind": "enum",
+              "params": {
+                "values": [
+                  1,
+                  2,
+                  3
+                ]
+              }
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Accept",
+        "json": "accept",
+        "type": {
+          "kind": "bool",
+          "rules": [
+            {
+              "kind": "const",
+              "params": {
+                "value": true
+              }
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Site",
+        "json": "site",
+        "type": {
+          "kind": "string",
+          "nullable": true,
+          "rules": [
+            {
+              "kind": "url"
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "ID",
+        "json": "id",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "uuid"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Ref",
+        "json": "ref",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "ulid"
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Code",
+        "json": "code",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "pattern",
+              "params": {
+                "regex": "^ub-"
+              }
+            },
+            {
+              "kind": "pattern",
+              "params": {
+                "regex": "-x$"
+              }
+            },
+            {
+              "kind": "pattern",
+              "params": {
+                "regex": "go"
+              }
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Tags",
+        "json": "tags",
+        "type": {
+          "kind": "array",
+          "elem": {
+            "kind": "string",
+            "rules": [
+              {
+                "kind": "minLength",
+                "params": {
+                  "value": 2
+                }
+              },
+              {
+                "kind": "pattern",
+                "params": {
+                  "regex": "^[a-zA-Z0-9]+$"
+                }
+              }
+            ]
+          },
+          "rules": [
+            {
+              "kind": "minItems",
+              "params": {
+                "value": 1
+              }
+            },
+            {
+              "kind": "maxItems",
+              "params": {
+                "value": 5
+              }
+            },
+            {
+              "kind": "unique"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Scores",
+        "json": "scores",
+        "type": {
+          "kind": "array",
+          "elem": {
+            "kind": "int",
+            "rules": [
+              {
+                "kind": "gte",
+                "params": {
+                  "value": 0
+                }
+              },
+              {
+                "kind": "lte",
+                "params": {
+                  "value": 10
+                }
+              }
+            ]
+          },
+          "rules": [
+            {
+              "kind": "minItems",
+              "params": {
+                "value": 3
+              }
+            },
+            {
+              "kind": "maxItems",
+              "params": {
+                "value": 3
+              }
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Labels",
+        "json": "labels",
+        "type": {
+          "kind": "map",
+          "key": {
+            "kind": "string"
+          },
+          "val": {
+            "kind": "string",
+            "rules": [
+              {
+                "kind": "maxLength",
+                "params": {
+                  "value": 8
+                }
+              }
+            ]
+          },
+          "rules": [
+            {
+              "kind": "maxItems",
+              "params": {
+                "value": 3
+              }
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Home",
+        "json": "home",
+        "type": {
+          "kind": "ref",
+          "ref": "Address"
+        }
+      },
+      {
+        "name": "Work",
+        "json": "work",
+        "type": {
+          "kind": "ref",
+          "nullable": true,
+          "ref": "Address"
+        },
+        "optional": true
+      },
+      {
+        "name": "Start",
+        "json": "start",
+        "type": {
+          "kind": "time"
+        }
+      },
+      {
+        "name": "End",
+        "json": "end",
+        "type": {
+          "kind": "time",
+          "rules": [
+            {
+              "kind": "after",
+              "params": {
+                "field": "Start"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Raw",
+        "json": "raw",
+        "type": {
+          "kind": "bytes",
+          "rules": [
+            {
+              "kind": "maxLength",
+              "params": {
+                "value": 16
+              }
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Coupon",
+        "json": "coupon",
+        "type": {
+          "kind": "string"
+        },
+        "optional": true
+      },
+      {
+        "name": "Venue",
+        "json": "venue",
+        "type": {
+          "kind": "string"
+        },
+        "optional": true
+      },
+      {
+        "name": "Phone",
+        "json": "phone",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "e164"
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Extra",
+        "json": "extra",
+        "type": {
+          "kind": "any"
+        },
+        "optional": true
+      },
+      {
+        "name": "Internal",
+        "type": {
+          "kind": "string"
+        }
+      },
+      {
+        "name": "Weird",
+        "json": "weird",
+        "type": {
+          "kind": "string"
+        }
+      },
+      {
+        "name": "Hex",
+        "json": "hex",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "pattern",
+              "params": {
+                "regex": "^(?:0[xX])?[0-9a-fA-F]+$"
+              }
+            },
+            {
+              "kind": "pattern",
+              "params": {
+                "regex": "^[^A-Z]*$"
+              }
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Nick",
+        "json": "nick",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "minLength",
+              "params": {
+                "value": 2
+              }
+            },
+            {
+              "kind": "maxLength",
+              "params": {
+                "value": 9
+              }
+            }
+          ]
+        },
+        "optional": true
+      }
+    ],
+    "gated": [
+      {
+        "kind": "requires",
+        "cond": {
+          "kind": "cmp",
+          "field": "Plan",
+          "op": "eq",
+          "value": "pro"
+        },
+        "fields": [
+          "Coupon"
+        ]
+      },
+      {
+        "kind": "requires",
+        "cond": {
+          "kind": "presence",
+          "field": "Ref",
+          "op": "present"
+        },
+        "fields": [
+          "Coupon"
+        ]
+      },
+      {
+        "kind": "requires",
+        "cond": {
+          "kind": "not",
+          "sub": [
+            {
+              "kind": "cmp",
+              "field": "Plan",
+              "op": "eq",
+              "value": "free"
+            }
+          ]
+        },
+        "fields": [
+          "Venue"
+        ]
+      },
+      {
+        "kind": "requires",
+        "cond": {
+          "kind": "presence",
+          "field": "Email",
+          "op": "absent"
+        },
+        "fields": [
+          "Phone"
+        ]
+      }
+    ]
+  },
+  "defs": {
+    "Address": {
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Street",
+          "json": "street",
+          "type": {
+            "kind": "string",
+            "rules": [
+              {
+                "kind": "minLength",
+                "params": {
+                  "value": 1
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "Zip",
+          "json": "zip",
+          "type": {
+            "kind": "string",
+            "rules": [
+              {
+                "kind": "minLength",
+                "params": {
+                  "value": 5
+                }
+              },
+              {
+                "kind": "maxLength",
+                "params": {
+                  "value": 5
+                }
+              },
+              {
+                "kind": "pattern",
+                "params": {
+                  "regex": "^[-+]?[0-9]+(?:\\.[0-9]+)?$"
+                }
+              }
+            ]
+          },
+          "optional": true
+        }
+      ]
+    }
+  },
+  "meta": {
+    "title": "Signup",
+    "generator": "test"
+  }
+}

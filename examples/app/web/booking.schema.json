@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/booking.json",
+  "title": "Booking",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "phone": {
+      "type": "string",
+      "pattern": "^\\+[1-9]\\d{1,14}$"
+    },
+    "check_in": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "check_out": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "guests": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+    },
+    "room": {
+      "type": "string",
+      "enum": [
+        "single",
+        "double",
+        "suite"
+      ]
+    },
+    "note": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 500
+    },
+    "extras": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "breakfast",
+          "parking",
+          "late-checkout"
+        ]
+      },
+      "maxItems": 3,
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "email",
+    "check_in",
+    "check_out",
+    "guests",
+    "room"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "allOf": [
+          {
+            "properties": {
+              "room": {
+                "const": "suite"
+              }
+            },
+            "required": [
+              "room"
+            ]
+          },
+          {
+            "properties": {
+              "guests": {
+                "maximum": 1
+              }
+            },
+            "required": [
+              "guests"
+            ]
+          }
+        ]
+      },
+      "then": {
+        "required": [
+          "note"
+        ]
+      }
+    }
+  ]
+}

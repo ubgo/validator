@@ -1,0 +1,49 @@
+# https://taskfile.dev
+#
+# Proof module: tests here exercise the library against INDEPENDENT
+# implementations (a third-party JSON Schema validator, the real TypeScript
+# runtime under Node) so capability claims are verified, not asserted. Kept
+# out of the root module so the library itself stays dependency-free.
+
+version: "3"
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  test:
+    desc: Run the proof tests (needs ts/dist — run `task ts:build` first)
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Run the proof tests with the race detector
+    cmds:
+      - go test -race ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  fmt:check:
+    desc: Fail when the source is unformatted
+    cmds:
+      - |
+        out=$(gofmt -l .)
+        if [ -n "$out" ]; then echo "gofmt needed on:"; echo "$out"; exit 1; fi
+
+  tidy:
+    desc: Tidy go.mod and go.sum
+    cmds:
+      - go mod tidy
+
+  ci:
+    desc: The full gate for the proof module — format, vet, race tests
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: test:race

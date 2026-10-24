@@ -1,0 +1,143 @@
+# The full gate, identical to `task ci` locally: format, vet, lint, race
+# tests for the library and CLI, typecheck + coverage-thresholded tests +
+# build for the TypeScript runtime, then the proof module (independent JSON
+# Schema validator, Node round-trip against a live server). The matrix runs
+# the whole thing on Linux and macOS; a separate job cross-compiles every
+# platform the README claims so a platform-only compile error cannot hide.
+name: ci
+
+# Disabled on push and pull_request while the API is still moving: the
+# local `task ci` is the gate during development, and a red badge on every
+# push is noise rather than signal. Run it from the Actions tab when you
+# want the things a Mac cannot check — the Go 1.24 floor, Linux, the
+# five-platform cross-compile, and govulncheck.
+#
+# The weekly scheduled run is off too: Actions minutes are metered, so
+# nothing here starts on its own. Run `task vuln` locally for the CVE scan.
+#
+# To re-enable, paste these back under `on:`:
+#   push:
+#     branches: [main]
+#   pull_request:
+#   schedule:
+#     - cron: "0 6 * * 1"
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Track the latest 1.26 patch: govulncheck findings in the standard
+  # library are fixed by the toolchain, not by this repository.
+  GO_VERSION: "1.26"
+  # The module floor. The gate runs on it too so the go.mod promise is
+  # verified on every push, not just claimed.
+  GO_MIN_VERSION: "1.24"
+  NODE_VERSION: "22"
+
+jobs:
+  gate:
+    name: gate (${{ matrix.os }}, go ${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: ["1.26", "1.24"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: |
+            cli/go.sum
+            examples/go.sum
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: ts/pnpm-lock.yaml
+
+      - name: Install task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install golangci-lint and staticcheck
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Install ts dependencies
+        working-directory: ts
+        run: pnpm install --frozen-lockfile
+
+      # The minimum-Go job runs the modules consumers import. The examples
+      # module may need a newer toolchain than the floor; proof code may
+      # move ahead of the floor, the published modules may not.
+      - name: Full gate
+        if: matrix.go != env.GO_MIN_VERSION
+        run: task ci
+
+      - name: Gate at the minimum supported Go
+        if: matrix.go == env.GO_MIN_VERSION
+        run: task ci:min
+
+  cross-compile:
+    name: cross-compile (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: freebsd, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          # The root module is stdlib-only and has no go.sum; point the
+          # cache at the modules that do.
+          cache-dependency-path: |
+            cli/go.sum
+            examples/go.sum
+      - name: Build library, CLI and generated examples
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build ./...
+          go vet ./...
+          cd cli && go build ./... && go build -o /dev/null ./cmd/validatorctl
+
+  vuln:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            cli/go.sum
+            examples/go.sum
+
+      - name: Scan every module
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+          (cd cli && govulncheck ./...)
+          (cd examples && govulncheck ./...)

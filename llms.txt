@@ -1,0 +1,18 @@
+# validator
+
+> Struct-native Go validator whose rules are a serializable IR — the same rules validate in Go, export to JSON Schema, and generate a Standard-Schema-compatible TypeScript validator. Backend is the single source of truth; the frontend validator is generated; rules that cannot cross the language boundary are reported, never silently dropped.
+
+validator is open source (ubgo/validator, Apache-2.0). Status: early development — the IR package is the first shipped piece.
+
+## Docs
+- [README](https://github.com/ubgo/validator/blob/main/README.md): what it is, the IR, the roadmap
+- [CHANGELOG](https://github.com/ubgo/validator/blob/main/CHANGELOG.md): release history
+- [CONTRIBUTING](https://github.com/ubgo/validator/blob/main/CONTRIBUTING.md): how to contribute
+
+## Install
+- Library: `go get github.com/ubgo/validator@latest`
+- CLI: `go install github.com/ubgo/validator/cli/cmd/validatorctl@latest`
+
+## Links
+- Repository: https://github.com/ubgo/validator
+- API docs: https://pkg.go.dev/github.com/ubgo/validator

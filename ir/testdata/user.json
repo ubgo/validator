@@ -1,0 +1,516 @@
+{
+  "version": "ubgo.validator.ir/v1",
+  "root": {
+    "kind": "object",
+    "fields": [
+      {
+        "name": "Email",
+        "json": "email",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "email"
+            },
+            {
+              "kind": "custom",
+              "params": {
+                "ref": "no_temp_domains"
+              },
+              "portable": "opaque"
+            },
+            {
+              "kind": "async",
+              "params": {
+                "endpoint": "/v/unique_email",
+                "ref": "unique_email"
+              },
+              "portable": "server"
+            }
+          ]
+        },
+        "transforms": [
+          {
+            "kind": "trim",
+            "phase": "pre"
+          },
+          {
+            "kind": "lower",
+            "phase": "pre"
+          }
+        ]
+      },
+      {
+        "name": "Age",
+        "json": "age",
+        "type": {
+          "kind": "int",
+          "bits": 32,
+          "rules": [
+            {
+              "kind": "min",
+              "params": {
+                "value": 18
+              }
+            },
+            {
+              "kind": "max",
+              "params": {
+                "value": 120
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Score",
+        "json": "score",
+        "type": {
+          "kind": "float",
+          "bits": 64,
+          "rules": [
+            {
+              "kind": "gte",
+              "params": {
+                "value": 0
+              }
+            },
+            {
+              "kind": "lte",
+              "params": {
+                "value": 1
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Active",
+        "json": "active",
+        "type": {
+          "kind": "bool"
+        }
+      },
+      {
+        "name": "Avatar",
+        "json": "avatar",
+        "type": {
+          "kind": "bytes",
+          "nullable": true
+        },
+        "optional": true
+      },
+      {
+        "name": "Start",
+        "json": "start",
+        "type": {
+          "kind": "time"
+        }
+      },
+      {
+        "name": "End",
+        "json": "end",
+        "type": {
+          "kind": "time",
+          "rules": [
+            {
+              "kind": "after",
+              "params": {
+                "field": "Start",
+                "label": "start"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "TTL",
+        "json": "ttl",
+        "type": {
+          "kind": "duration",
+          "rules": [
+            {
+              "kind": "gt",
+              "params": {
+                "value": 0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Tags",
+        "json": "tags",
+        "type": {
+          "kind": "array",
+          "elem": {
+            "kind": "string",
+            "rules": [
+              {
+                "kind": "minLength",
+                "params": {
+                  "value": 1
+                }
+              },
+              {
+                "kind": "enum",
+                "params": {
+                  "values": [
+                    "a",
+                    "b"
+                  ]
+                }
+              }
+            ]
+          },
+          "rules": [
+            {
+              "kind": "minItems",
+              "params": {
+                "value": 1
+              }
+            },
+            {
+              "kind": "maxItems",
+              "params": {
+                "value": 10
+              }
+            },
+            {
+              "kind": "unique"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Labels",
+        "json": "labels",
+        "type": {
+          "kind": "map",
+          "key": {
+            "kind": "string"
+          },
+          "val": {
+            "kind": "int",
+            "rules": [
+              {
+                "kind": "multipleOf",
+                "params": {
+                  "value": 2
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "Home",
+        "json": "home",
+        "type": {
+          "kind": "ref",
+          "ref": "Address"
+        }
+      },
+      {
+        "name": "Extra",
+        "json": "extra",
+        "type": {
+          "kind": "any"
+        }
+      },
+      {
+        "name": "IDOrName",
+        "json": "idOrName",
+        "type": {
+          "kind": "union",
+          "variants": [
+            {
+              "kind": "int"
+            },
+            {
+              "kind": "string",
+              "rules": [
+                {
+                  "kind": "uuid"
+                },
+                {
+                  "kind": "ulid"
+                },
+                {
+                  "kind": "url"
+                },
+                {
+                  "kind": "const",
+                  "params": {
+                    "value": "x"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Type",
+        "json": "type",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "enum",
+              "params": {
+                "values": [
+                  "online",
+                  "offline"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "URL",
+        "json": "url",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "url"
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Venue",
+        "json": "venue",
+        "type": {
+          "kind": "string"
+        },
+        "optional": true
+      },
+      {
+        "name": "Coupon",
+        "json": "coupon",
+        "type": {
+          "kind": "string"
+        },
+        "optional": true
+      },
+      {
+        "name": "Event",
+        "json": "event",
+        "type": {
+          "kind": "oneof",
+          "discriminator": "kind",
+          "cases": {
+            "offline": {
+              "kind": "object",
+              "fields": [
+                {
+                  "name": "kind",
+                  "type": {
+                    "kind": "string",
+                    "rules": [
+                      {
+                        "kind": "const",
+                        "params": {
+                          "value": "offline"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "address",
+                  "type": {
+                    "kind": "ref",
+                    "ref": "Address"
+                  }
+                }
+              ]
+            },
+            "online": {
+              "kind": "object",
+              "fields": [
+                {
+                  "name": "kind",
+                  "type": {
+                    "kind": "string",
+                    "rules": [
+                      {
+                        "kind": "const",
+                        "params": {
+                          "value": "online"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "url",
+                  "type": {
+                    "kind": "string",
+                    "rules": [
+                      {
+                        "kind": "url"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "default": {
+            "kind": "any"
+          }
+        }
+      }
+    ],
+    "extra": "forbid",
+    "gated": [
+      {
+        "kind": "when",
+        "cond": {
+          "kind": "cmp",
+          "field": "Type",
+          "op": "eq",
+          "value": "online"
+        },
+        "then": [
+          {
+            "field": "URL",
+            "rule": {
+              "kind": "minLength",
+              "params": {
+                "value": 1
+              }
+            }
+          }
+        ],
+        "else": [
+          {
+            "field": "Venue",
+            "rule": {
+              "kind": "minLength",
+              "params": {
+                "value": 1
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "requires",
+        "cond": {
+          "kind": "and",
+          "sub": [
+            {
+              "kind": "presence",
+              "field": "Coupon",
+              "op": "present"
+            },
+            {
+              "kind": "not",
+              "sub": [
+                {
+                  "kind": "in",
+                  "field": "Type",
+                  "values": [
+                    "offline"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "fields": [
+          "Venue"
+        ]
+      },
+      {
+        "kind": "group",
+        "fields": [
+          "URL",
+          "Venue"
+        ],
+        "mode": "exactly-one"
+      },
+      {
+        "kind": "when",
+        "cond": {
+          "kind": "or",
+          "sub": [
+            {
+              "kind": "fieldcmp",
+              "field": "End",
+              "op": "gt",
+              "fieldB": "Start"
+            },
+            {
+              "kind": "expr",
+              "cel": "end \u003e start"
+            },
+            {
+              "kind": "custom",
+              "ref": "weird"
+            }
+          ]
+        },
+        "then": [
+          {
+            "field": "TTL",
+            "rule": {
+              "kind": "lt",
+              "params": {
+                "value": 10
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "defs": {
+    "Address": {
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Street",
+          "json": "street",
+          "type": {
+            "kind": "string",
+            "rules": [
+              {
+                "kind": "minLength",
+                "params": {
+                  "value": 1
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "Zip",
+          "json": "zip",
+          "type": {
+            "kind": "string",
+            "rules": [
+              {
+                "kind": "pattern",
+                "params": {
+                  "regex": "^[0-9]{5}$"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "meta": {
+    "title": "User",
+    "source": "github.com/acme/app/models.User",
+    "generator": "test"
+  }
+}

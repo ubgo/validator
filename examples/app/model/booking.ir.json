@@ -1,0 +1,214 @@
+{
+  "version": "ubgo.validator.ir/v1",
+  "root": {
+    "kind": "object",
+    "rules": [
+      {
+        "kind": "custom",
+        "params": {
+          "ref": "fits_the_room"
+        },
+        "portable": "opaque"
+      },
+      {
+        "kind": "custom",
+        "params": {
+          "ref": "stay_length"
+        },
+        "portable": "opaque"
+      }
+    ],
+    "fields": [
+      {
+        "name": "Email",
+        "json": "email",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "email"
+            },
+            {
+              "kind": "async",
+              "params": {
+                "endpoint": "/v/email_free",
+                "ref": "email_free"
+              },
+              "portable": "server"
+            }
+          ]
+        },
+        "transforms": [
+          {
+            "kind": "trim",
+            "phase": "pre"
+          },
+          {
+            "kind": "lower",
+            "phase": "pre"
+          }
+        ]
+      },
+      {
+        "name": "Phone",
+        "json": "phone",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "e164"
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "CheckIn",
+        "json": "check_in",
+        "type": {
+          "kind": "time"
+        }
+      },
+      {
+        "name": "CheckOut",
+        "json": "check_out",
+        "type": {
+          "kind": "time",
+          "rules": [
+            {
+              "kind": "after",
+              "params": {
+                "field": "CheckIn",
+                "label": "check_in"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Guests",
+        "json": "guests",
+        "type": {
+          "kind": "int",
+          "rules": [
+            {
+              "kind": "min",
+              "params": {
+                "value": 1
+              }
+            },
+            {
+              "kind": "max",
+              "params": {
+                "value": 4
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Room",
+        "json": "room",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "enum",
+              "params": {
+                "values": [
+                  "single",
+                  "double",
+                  "suite"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Note",
+        "json": "note",
+        "type": {
+          "kind": "string",
+          "rules": [
+            {
+              "kind": "minLength",
+              "params": {
+                "value": 10
+              }
+            },
+            {
+              "kind": "maxLength",
+              "params": {
+                "value": 500
+              }
+            }
+          ]
+        },
+        "optional": true
+      },
+      {
+        "name": "Extras",
+        "json": "extras",
+        "type": {
+          "kind": "array",
+          "elem": {
+            "kind": "string",
+            "rules": [
+              {
+                "kind": "enum",
+                "params": {
+                  "values": [
+                    "breakfast",
+                    "parking",
+                    "late-checkout"
+                  ]
+                }
+              }
+            ]
+          },
+          "rules": [
+            {
+              "kind": "maxItems",
+              "params": {
+                "value": 3
+              }
+            },
+            {
+              "kind": "unique"
+            }
+          ]
+        },
+        "optional": true
+      }
+    ],
+    "gated": [
+      {
+        "kind": "requires",
+        "cond": {
+          "kind": "and",
+          "sub": [
+            {
+              "kind": "cmp",
+              "field": "Room",
+              "op": "eq",
+              "value": "suite"
+            },
+            {
+              "kind": "cmp",
+              "field": "Guests",
+              "op": "lte",
+              "value": 1
+            }
+          ]
+        },
+        "fields": [
+          "Note"
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "title": "Booking"
+  }
+}

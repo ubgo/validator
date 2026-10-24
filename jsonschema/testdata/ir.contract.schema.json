@@ -1,0 +1,659 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ubgo.dev/schemas/validator-ir-v1.json",
+  "title": "ubgo/validator IR ubgo.validator.ir/v1",
+  "description": "Serialized rule-tree IR. Version, root and defs; nodes are discriminated by \"kind\".",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "root": {
+      "$ref": "#/$defs/TypeNode"
+    },
+    "defs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/TypeNode"
+      }
+    },
+    "meta": {
+      "$ref": "#/$defs/SchemaMeta"
+    }
+  },
+  "required": [
+    "version",
+    "root"
+  ],
+  "allOf": [
+    {
+      "properties": {
+        "version": {
+          "const": "ubgo.validator.ir/v1"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "SchemaMeta": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "generator": {
+          "type": "string"
+        }
+      }
+    },
+    "NodeMeta": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "messageKey": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "description": {
+          "type": "string"
+        },
+        "examples": {
+          "type": "array",
+          "items": {}
+        }
+      }
+    },
+    "Condition": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "op": {
+          "type": "string"
+        },
+        "value": {},
+        "fieldB": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {}
+        },
+        "sub": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Condition"
+          }
+        },
+        "cel": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "Rule": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "cond": {
+          "$ref": "#/$defs/Condition"
+        },
+        "portable": {
+          "type": "string"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "Transform": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "kind",
+        "phase"
+      ]
+    },
+    "FieldNode": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "json": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/TypeNode"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "transforms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Transform"
+          }
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ]
+    },
+    "TargetRule": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "rule": {
+          "$ref": "#/$defs/Rule"
+        }
+      },
+      "required": [
+        "field",
+        "rule"
+      ]
+    },
+    "GatedRules": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "cond": {
+          "$ref": "#/$defs/Condition"
+        },
+        "then": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TargetRule"
+          }
+        },
+        "else": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TargetRule"
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mode": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "ObjectNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "object"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldNode"
+          }
+        },
+        "extra": {
+          "type": "string"
+        },
+        "gated": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GatedRules"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "StringNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "string"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "IntNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "int"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "bits": {
+          "type": "integer"
+        },
+        "unsigned": {
+          "type": "boolean"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "FloatNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "float"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "bits": {
+          "type": "integer"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "BoolNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "bool"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "BytesNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "bytes"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "TimeNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "time"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "DurationNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "duration"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "ArrayNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "array"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "elem": {
+          "$ref": "#/$defs/TypeNode"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "elem"
+      ],
+      "additionalProperties": false
+    },
+    "MapNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "map"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "key": {
+          "$ref": "#/$defs/TypeNode"
+        },
+        "val": {
+          "$ref": "#/$defs/TypeNode"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "val"
+      ],
+      "additionalProperties": false
+    },
+    "UnionNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "union"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TypeNode"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "variants"
+      ],
+      "additionalProperties": false
+    },
+    "OneOfNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "oneof"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "discriminator": {
+          "type": "string"
+        },
+        "cases": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/TypeNode"
+          }
+        },
+        "default": {
+          "$ref": "#/$defs/TypeNode"
+        }
+      },
+      "required": [
+        "kind",
+        "discriminator",
+        "cases"
+      ],
+      "additionalProperties": false
+    },
+    "RefNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "ref"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        },
+        "ref": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "additionalProperties": false
+    },
+    "AnyNode": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "any"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "meta": {
+          "$ref": "#/$defs/NodeMeta"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "TypeNode": {
+      "description": "A type node, discriminated by kind.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ObjectNode"
+        },
+        {
+          "$ref": "#/$defs/StringNode"
+        },
+        {
+          "$ref": "#/$defs/IntNode"
+        },
+        {
+          "$ref": "#/$defs/FloatNode"
+        },
+        {
+          "$ref": "#/$defs/BoolNode"
+        },
+        {
+          "$ref": "#/$defs/BytesNode"
+        },
+        {
+          "$ref": "#/$defs/TimeNode"
+        },
+        {
+          "$ref": "#/$defs/DurationNode"
+        },
+        {
+          "$ref": "#/$defs/ArrayNode"
+        },
+        {
+          "$ref": "#/$defs/MapNode"
+        },
+        {
+          "$ref": "#/$defs/UnionNode"
+        },
+        {
+          "$ref": "#/$defs/OneOfNode"
+        },
+        {
+          "$ref": "#/$defs/RefNode"
+        },
+        {
+          "$ref": "#/$defs/AnyNode"
+        }
+      ]
+    }
+  }
+}
