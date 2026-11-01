@@ -33,7 +33,7 @@
     "json-schema-to-ts": "^3.1.1"
   },
   "devDependencies": {
-    "@hono/standard-validator": "^0.1.5",
+    "@hono/standard-validator": "^0.4.1",
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^3.2.4",
     "hono": "^4.13.7",
