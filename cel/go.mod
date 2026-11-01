@@ -7,12 +7,14 @@
 // want it.
 module github.com/ubgo/validator/cel
 
-go 1.24
+go 1.25.0
 
 require github.com/ubgo/validator v0.0.0
 
+require golang.org/x/text v0.41.0 // indirect
+
 require (
-	cel.dev/cel-go v0.32.0
+	cel.dev/cel-go v0.33.1
 	cel.dev/expr v0.25.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
